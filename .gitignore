@@ -1,0 +1,30 @@
+# Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Supabase
+supabase/.branches/
+supabase/.temp/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

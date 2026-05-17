@@ -1,0 +1,39 @@
+# Supabase configuration file
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://localhost:54321"
+
+[auth]
+enabled = true
+jwt_expiry = 3600
+enable_signup = true
+email_confirmations = true
+
+[auth.email]
+enable_signup_verification = true
+template = {}
+
+[analytics]
+enabled = false
+port = 54327
+vector_port = 54328
+
+[functions]
+[functions.cast_vote]
+verify_jwt = false
+
+[functions.generate_voter_codes]
+verify_jwt = false
