@@ -21,42 +21,46 @@ function getSupabaseServiceKey() {
   return process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY;
 }
 
-export function getServiceSupabase() {
-  if (!serviceClient) {
-    const url = getSupabaseUrl();
-    const key = getSupabaseServiceKey();
-
-    if (!url || !key) {
-      throw new Error(
-        "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for server API routes.",
-      );
-    }
-
-    serviceClient = createClient<Database, "app_open_vote">(url, key, {
-      db: { schema: "app_open_vote" },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+export function getServiceSupabase(): SupabaseClient<Database, "app_open_vote"> {
+  if (serviceClient) {
+    return serviceClient;
   }
+
+  const url = getSupabaseUrl();
+  const key = getSupabaseServiceKey();
+
+  if (!url || !key) {
+    throw new Error(
+      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for server API routes.",
+    );
+  }
+
+  serviceClient = createClient<Database, "app_open_vote">(url, key, {
+    db: { schema: "app_open_vote" },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   return serviceClient;
 }
 
-export function getAnonSupabase() {
-  if (!anonClient) {
-    const url = getSupabaseUrl();
-    const key = getSupabaseAnonKey();
-
-    if (!url || !key) {
-      throw new Error(
-        "SUPABASE_URL and SUPABASE_ANON_KEY are required for public reads.",
-      );
-    }
-
-    anonClient = createClient<Database, "app_open_vote">(url, key, {
-      db: { schema: "app_open_vote" },
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+export function getAnonSupabase(): SupabaseClient<Database, "app_open_vote"> {
+  if (anonClient) {
+    return anonClient;
   }
+
+  const url = getSupabaseUrl();
+  const key = getSupabaseAnonKey();
+
+  if (!url || !key) {
+    throw new Error(
+      "SUPABASE_URL and SUPABASE_ANON_KEY are required for public reads.",
+    );
+  }
+
+  anonClient = createClient<Database, "app_open_vote">(url, key, {
+    db: { schema: "app_open_vote" },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
   return anonClient;
 }
