@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
-let browserClient: SupabaseClient<Database> | null = null;
+let browserClient: SupabaseClient<Database, "app_open_vote"> | null = null;
 
 export function getBrowserSupabase() {
   if (browserClient) {
@@ -20,6 +20,8 @@ export function getBrowserSupabase() {
     return null;
   }
 
-  browserClient = createClient<Database>(url, key);
+  browserClient = createClient<Database, "app_open_vote">(url, key, {
+    db: { schema: "app_open_vote" },
+  });
   return browserClient;
 }

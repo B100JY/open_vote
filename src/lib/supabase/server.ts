@@ -2,8 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
-let serviceClient: SupabaseClient<Database> | null = null;
-let anonClient: SupabaseClient<Database> | null = null;
+let serviceClient: SupabaseClient<Database, "app_open_vote"> | null = null;
+let anonClient: SupabaseClient<Database, "app_open_vote"> | null = null;
 
 function getSupabaseUrl() {
   return process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -32,7 +32,8 @@ export function getServiceSupabase() {
       );
     }
 
-    serviceClient = createClient<Database>(url, key, {
+    serviceClient = createClient<Database, "app_open_vote">(url, key, {
+      db: { schema: "app_open_vote" },
       auth: { persistSession: false, autoRefreshToken: false },
     });
   }
@@ -51,7 +52,8 @@ export function getAnonSupabase() {
       );
     }
 
-    anonClient = createClient<Database>(url, key, {
+    anonClient = createClient<Database, "app_open_vote">(url, key, {
+      db: { schema: "app_open_vote" },
       auth: { persistSession: false, autoRefreshToken: false },
     });
   }

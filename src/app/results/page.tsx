@@ -82,7 +82,7 @@ export default function ResultsPage() {
         "postgres_changes",
         {
           event: "*",
-          schema: "public",
+          schema: "app_open_vote",
           table: "ballots",
           filter: `election_id=eq.${selectedElectionId}`,
         },
