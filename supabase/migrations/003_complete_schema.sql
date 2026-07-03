@@ -488,6 +488,20 @@ CREATE POLICY "audit_logs_service_only"
     WITH CHECK (false);
 
 -- =====================================================
+-- Data API Grants
+-- =====================================================
+-- Supabase 신규 프로젝트에서 public schema 자동 노출/권한 부여 기본값이 바뀌어도
+-- 서버 API(service_role)와 공개 Realtime(elections, ballots)이 동일하게 동작하도록 설정합니다.
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT ON elections, ballots TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON elections, voter_codes, ballots, rate_limits, audit_logs TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE rate_limits_id_seq TO service_role;
+GRANT EXECUTE ON FUNCTION cast_anonymous_vote(UUID, TEXT, TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION generate_voter_codes_batch(UUID, INTEGER, TEXT[]) TO service_role;
+GRANT EXECUTE ON FUNCTION get_vote_results(UUID) TO service_role;
+GRANT EXECUTE ON FUNCTION get_election_stats(UUID) TO service_role;
+
+-- =====================================================
 -- Supabase Realtime Configuration
 -- =====================================================
 BEGIN;
