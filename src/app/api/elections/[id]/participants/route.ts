@@ -1,14 +1,20 @@
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
+import { requireAdmin } from "@/lib/supabase/auth";
 import { getServiceSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
+    const auth = await requireAdmin(request);
+    if (!auth.ok) {
+      return jsonError(auth.message, auth.status, auth.error);
+    }
+
     const { id } = await context.params;
     const supabase = getServiceSupabase();
 

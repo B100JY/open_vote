@@ -31,16 +31,6 @@ export type VoterRegistry = {
   updated_at: string;
 };
 
-export type VoterCode = {
-  id: string;
-  election_id: string;
-  code: string;
-  phone_suffix: string;
-  is_used: boolean;
-  created_at: string;
-  used_at: string | null;
-};
-
 export type ElectionStats = {
   election: {
     id: string;

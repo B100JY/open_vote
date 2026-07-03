@@ -12,7 +12,9 @@ import {
   RefreshCw,
   Square,
 } from "lucide-react";
+import { AdminGate } from "@/components/admin-gate";
 import { Alert, Badge, Button, EmptyState, Panel } from "@/components/ui";
+import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
 import type { Election, ElectionStatus, VoterRegistry } from "@/lib/types";
 import {
@@ -28,6 +30,14 @@ type CodesResponse = {
 };
 
 export default function ManageElectionsPage() {
+  return (
+    <AdminGate>
+      <ManageElections />
+    </AdminGate>
+  );
+}
+
+function ManageElections() {
   const [elections, setElections] = useState<Election[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState("");
@@ -38,7 +48,9 @@ export default function ManageElectionsPage() {
     setLoading(true);
     setError("");
     try {
-      const data = await fetchJson<{ elections: Election[] }>("/api/elections");
+      const data = await fetchJson<{ elections: Election[] }>("/api/elections", {
+        headers: await authHeaders(),
+      });
       setElections(data.elections);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "선거 목록을 불러오지 못했습니다.");
@@ -57,6 +69,7 @@ export default function ManageElectionsPage() {
     try {
       await fetchJson<{ election: Election }>(`/api/elections/${election.id}`, {
         method: "PATCH",
+        headers: await authHeaders(),
         body: JSON.stringify({ status }),
       });
       await load();
@@ -72,6 +85,7 @@ export default function ManageElectionsPage() {
     try {
       const data = await fetchJson<CodesResponse>(
         `/api/elections/${election.id}/participants`,
+        { headers: await authHeaders() },
       );
       const lines = [
         `선거명: ${csvEscape(election.name)}`,
@@ -108,7 +122,7 @@ export default function ManageElectionsPage() {
     try {
       const result = await fetchJson<{ sent: number; failed: number }>(
         `/api/elections/${election.id}/participants/invite`,
-        { method: "POST" },
+        { method: "POST", headers: await authHeaders() },
       );
       await load();
       if (result.failed > 0) {

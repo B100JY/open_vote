@@ -6,14 +6,6 @@ function toHex(bytes: Uint8Array) {
     .join("");
 }
 
-function fromHex(value: string) {
-  const bytes = new Uint8Array(value.length / 2);
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-  }
-  return bytes;
-}
-
 export function createSalt() {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -53,17 +45,6 @@ export async function createVoteReceipt({
   });
 
   return { salt, receiptHash };
-}
-
-export async function createChainHash(ballot: PublicLedgerBallot) {
-  return sha256Hex(
-    [
-      ballot.sequence_number,
-      ballot.selected_candidate,
-      ballot.receipt_hash,
-      ballot.previous_chain_hash ?? "GENESIS",
-    ].join("|"),
-  );
 }
 
 export async function createDatabaseChainHash(
@@ -113,12 +94,4 @@ export async function verifyLedgerChain(
 
 export function normalizeReceiptInput(value: string) {
   return value.trim().toLowerCase().replace(/^0x/, "");
-}
-
-export function decodeReceiptSalt(value: string) {
-  const normalized = normalizeReceiptInput(value);
-  if (!/^[a-f0-9]{64}$/.test(normalized)) {
-    return null;
-  }
-  return toHex(fromHex(normalized));
 }

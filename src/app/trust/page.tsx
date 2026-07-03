@@ -44,7 +44,7 @@ export default function TrustPage() {
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 mb-2">신원과 기표의 분리</h3>
                 <p className="text-slate-600 leading-relaxed">
-                  유권자가 "투표했다"는 기록과 "누구에게 투표했나"라는 데이터는 서로 다른 상자에 담깁니다. 
+                  유권자가 &ldquo;투표했다&rdquo;는 기록과 &ldquo;누구에게 투표했나&rdquo;라는 데이터는 서로 다른 상자에 담깁니다.
                   두 데이터 사이에는 어떠한 연결 고리도 없으므로, 데이터베이스를 직접 들여다보더라도 누가 무엇을 투표했는지 추적하는 것은 불가능합니다.
                 </p>
               </div>
@@ -140,7 +140,7 @@ export default function TrustPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">강력한 보안 정책 (RLS)</h3>
                   <p className="text-slate-600">
-                    데이터베이스 차원에서 '수정'과 '삭제' 명령이 원천적으로 차단되어 있습니다. 
+                    데이터베이스 차원에서 &lsquo;수정&rsquo;과 &lsquo;삭제&rsquo; 명령이 원천적으로 차단되어 있습니다.
                     시스템 관리자라 할지라도 한번 제출된 투표지를 바꾸거나 삭제하는 것은 기술적으로 불가능하도록 설계되었습니다.
                   </p>
                 </div>

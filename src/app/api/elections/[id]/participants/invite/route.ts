@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
+import { requireAdmin } from "@/lib/supabase/auth";
 import { getServiceSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,11 @@ export async function POST(
   context: { params: Promise<{ id: string }> },
 ) {
   try {
+    const auth = await requireAdmin(request);
+    if (!auth.ok) {
+      return jsonError(auth.message, auth.status, auth.error);
+    }
+
     const { id } = await context.params;
     const supabase = getServiceSupabase();
     const origin = request.headers.get("origin") ?? new URL(request.url).origin;
@@ -56,6 +62,7 @@ export async function POST(
       details: {
         sent,
         failed,
+        actor: auth.user.user.id,
         sent_at: new Date().toISOString(),
       },
     });

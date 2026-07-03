@@ -10,7 +10,9 @@ import {
   Trash2,
   Vote,
 } from "lucide-react";
+import { AdminGate } from "@/components/admin-gate";
 import { Alert, Button, Field, Panel, Textarea } from "@/components/ui";
+import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
 import type { Candidate, Election, VoterRegistry } from "@/lib/types";
 import { csvEscape } from "@/lib/utils";
@@ -65,6 +67,14 @@ function createOption(name: string): Candidate {
 }
 
 export default function AdminPage() {
+  return (
+    <AdminGate>
+      <AdminCreateForm />
+    </AdminGate>
+  );
+}
+
+function AdminCreateForm() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [voterEmails, setVoterEmails] = useState("");
@@ -135,6 +145,7 @@ export default function AdminPage() {
     try {
       const response = await fetchJson<CreateResponse>("/api/elections", {
         method: "POST",
+        headers: await authHeaders(),
         body: JSON.stringify({
           name,
           description,

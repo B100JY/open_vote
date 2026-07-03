@@ -1,7 +1,9 @@
 import { getServiceSupabase } from "@/lib/supabase/server";
-
-const MAX_ATTEMPTS = 5;
-const BLOCK_DURATION_MS = 15 * 60 * 1000;
+import {
+  blockStatus,
+  nextFailureState,
+  type RateLimitSnapshot,
+} from "@/lib/rate-limit-window";
 
 type RateLimitRow = {
   id: number;
@@ -9,6 +11,18 @@ type RateLimitRow = {
   blocked_until: string | null;
   last_attempt_at: string | null;
 };
+
+function toSnapshot(row: RateLimitRow): RateLimitSnapshot {
+  return {
+    attemptCount: Number(row.attempt_count ?? 0),
+    lastAttemptAtMs: row.last_attempt_at
+      ? new Date(row.last_attempt_at).getTime()
+      : null,
+    blockedUntilMs: row.blocked_until
+      ? new Date(row.blocked_until).getTime()
+      : null,
+  };
+}
 
 export async function checkRateLimit(ipAddress: string, endpoint: string) {
   try {
@@ -22,21 +36,11 @@ export async function checkRateLimit(ipAddress: string, endpoint: string) {
       .limit(1)
       .maybeSingle<RateLimitRow>();
 
-    if (!data?.blocked_until) {
-      return { blocked: false, remainingSeconds: 0 };
-    }
+    const blockedUntilMs = data?.blocked_until
+      ? new Date(data.blocked_until).getTime()
+      : null;
 
-    const blockedUntil = new Date(data.blocked_until).getTime();
-    const now = Date.now();
-
-    if (blockedUntil <= now) {
-      return { blocked: false, remainingSeconds: 0 };
-    }
-
-    return {
-      blocked: true,
-      remainingSeconds: Math.ceil((blockedUntil - now) / 1000),
-    };
+    return blockStatus(blockedUntilMs, Date.now());
   } catch {
     return { blocked: false, remainingSeconds: 0 };
   }
@@ -54,27 +58,32 @@ export async function recordFailedAttempt(ipAddress: string, endpoint: string) {
       .limit(1)
       .maybeSingle<RateLimitRow>();
 
+    const decision = nextFailureState(
+      data ? toSnapshot(data) : null,
+      Date.now(),
+    );
+
     if (!data) {
       await supabase.from("rate_limits").insert({
         ip_address: ipAddress,
         endpoint,
-        attempt_count: 1,
-        last_attempt_at: new Date().toISOString(),
+        attempt_count: decision.attemptCount,
+        last_attempt_at: new Date(decision.lastAttemptAtMs).toISOString(),
+        blocked_until: decision.blockedUntilMs
+          ? new Date(decision.blockedUntilMs).toISOString()
+          : null,
       });
       return;
     }
 
-    const nextCount = Number(data.attempt_count ?? 0) + 1;
-    const shouldBlock = nextCount >= MAX_ATTEMPTS;
-
     await supabase
       .from("rate_limits")
       .update({
-        attempt_count: nextCount,
-        last_attempt_at: new Date().toISOString(),
-        blocked_until: shouldBlock
-          ? new Date(Date.now() + BLOCK_DURATION_MS).toISOString()
-          : data.blocked_until,
+        attempt_count: decision.attemptCount,
+        last_attempt_at: new Date(decision.lastAttemptAtMs).toISOString(),
+        blocked_until: decision.blockedUntilMs
+          ? new Date(decision.blockedUntilMs).toISOString()
+          : null,
       })
       .eq("id", data.id);
   } catch {

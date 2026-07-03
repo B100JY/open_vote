@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
+import { isRequestAdmin, requireAdmin } from "@/lib/supabase/auth";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import type { Candidate, ElectionStatus } from "@/lib/types";
 import { normalizeElection } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 const statuses = new Set<ElectionStatus>(["draft", "active", "paused", "closed"]);
+// 비관리자(공개)에게 노출 가능한 상태
+const publicStatuses = new Set<ElectionStatus>(["active", "closed"]);
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function cleanCandidates(candidates: unknown): Candidate[] {
@@ -64,7 +67,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const visibility = searchParams.get("visibility");
+    const admin = await isRequestAdmin(request);
     const supabase = getServiceSupabase();
 
     let query = supabase
@@ -72,9 +75,16 @@ export async function GET(request: Request) {
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (status && statuses.has(status as ElectionStatus)) {
+    if (admin) {
+      // 관리자는 draft/paused 포함 모든 상태를 조회할 수 있습니다.
+      if (status && statuses.has(status as ElectionStatus)) {
+        query = query.eq("status", status as ElectionStatus);
+      }
+    } else if (status && publicStatuses.has(status as ElectionStatus)) {
+      // 비관리자는 공개 상태(active/closed)만 필터링할 수 있습니다.
       query = query.eq("status", status as ElectionStatus);
-    } else if (visibility === "public") {
+    } else {
+      // 그 외(필터 없음, draft 요청 등)는 공개 상태만 반환합니다.
       query = query.in("status", ["active", "closed"]);
     }
 
@@ -97,6 +107,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const auth = await requireAdmin(request);
+    if (!auth.ok) {
+      return jsonError(auth.message, auth.status, auth.error);
+    }
+
     const body = (await request.json()) as Record<string, unknown>;
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const description =
@@ -132,6 +147,7 @@ export async function POST(request: Request) {
         description: description || null,
         candidates,
         total_voter_codes: voterCount,
+        created_by: auth.user.user.id,
         starts_at: now.toISOString(),
         ends_at: endsAt.toISOString(),
       })
@@ -170,6 +186,7 @@ export async function POST(request: Request) {
       election_id: election.id,
       details: {
         count: voters?.length ?? voterCount,
+        actor: auth.user.user.id,
         created_at: new Date().toISOString(),
       },
     });

@@ -4,6 +4,7 @@ import { recordFailedAttempt, checkRateLimit } from "@/lib/rate-limit";
 import { getRequestUser, getUserEmail } from "@/lib/supabase/auth";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { normalizeCandidates } from "@/lib/utils";
+import { voteErrorStatus } from "@/lib/vote-status";
 
 export const dynamic = "force-dynamic";
 
@@ -92,18 +93,9 @@ export async function POST(request: Request) {
 
     if (!voteResult?.success) {
       await recordFailedAttempt(ipAddress, endpoint);
-      const status =
-        voteResult?.error === "election_not_active"
-          ? 403
-          : voteResult?.error === "not_registered"
-            ? 401
-            : voteResult?.error === "already_voted"
-              ? 409
-            : 400;
-
       return jsonError(
         voteResult?.message ?? "투표를 완료하지 못했습니다.",
-        status,
+        voteErrorStatus(voteResult?.error),
         voteResult?.error,
       );
     }
