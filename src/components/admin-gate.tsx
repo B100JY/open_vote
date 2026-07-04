@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LogOut, Mail, ShieldAlert, ShieldCheck } from "lucide-react";
+import { LogIn, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Alert, Button, Field, Panel } from "@/components/ui";
 import { isAdminUser } from "@/lib/admin-role";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
@@ -9,8 +9,26 @@ import { getBrowserSupabase } from "@/lib/supabase/browser";
 type GateState = "checking" | "anonymous" | "forbidden" | "admin";
 
 /**
+ * Supabase 로그인 에러를 사용자용 한국어 메시지로 변환합니다.
+ */
+function toLoginError(caught: unknown): string {
+  const message = caught instanceof Error ? caught.message : "";
+
+  if (/invalid login credentials/i.test(message)) {
+    return "이메일 또는 비밀번호가 올바르지 않습니다.";
+  }
+  if (/email not confirmed/i.test(message)) {
+    return "이메일 인증이 완료되지 않은 계정입니다.";
+  }
+  if (message) {
+    return message;
+  }
+  return "로그인에 실패했습니다.";
+}
+
+/**
  * 관리자 전용 페이지를 감싸는 게이트.
- * - 비로그인: 매직 링크 로그인 폼 표시
+ * - 비로그인: 이메일·비밀번호 로그인 폼 표시
  * - 로그인했으나 admin 권한 없음: 안내 + 로그아웃
  * - admin: children 렌더링
  *
@@ -19,7 +37,7 @@ type GateState = "checking" | "anonymous" | "forbidden" | "admin";
 export function AdminGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GateState>("checking");
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -48,18 +66,16 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSent(false);
       evaluate(session);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  async function sendMagicLink(event: React.FormEvent) {
+  async function signIn(event: React.FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError("");
-    setSent(false);
 
     try {
       const supabase = getBrowserSupabase();
@@ -68,22 +84,23 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
       }
 
       const cleanEmail = email.trim().toLowerCase();
-      if (!cleanEmail) {
-        throw new Error("이메일을 입력해주세요.");
+      if (!cleanEmail || !password) {
+        throw new Error("이메일과 비밀번호를 모두 입력해주세요.");
       }
 
-      const { error: signInError } = await supabase.auth.signInWithOtp({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
-        options: { emailRedirectTo: window.location.href },
+        password,
       });
 
       if (signInError) {
         throw signInError;
       }
 
-      setSent(true);
+      // 성공 시 onAuthStateChange가 세션을 반영해 admin/forbidden 상태로 전환합니다.
+      setPassword("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "매직 링크 발송에 실패했습니다.");
+      setError(toLoginError(caught));
     } finally {
       setLoading(false);
     }
@@ -92,6 +109,7 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
   async function signOut() {
     const supabase = getBrowserSupabase();
     await supabase?.auth.signOut();
+    setPassword("");
     setState("anonymous");
   }
 
@@ -134,29 +152,35 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
         <div>
           <h1 className="text-lg font-semibold text-slate-950">관리자 로그인</h1>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            관리 기능은 매직 링크로 로그인한 관리자만 사용할 수 있습니다.
+            관리 기능은 관리자 계정의 이메일과 비밀번호로 로그인해야 사용할 수 있습니다.
           </p>
         </div>
       </div>
 
-      <form className="grid gap-4" onSubmit={sendMagicLink}>
+      <form className="grid gap-4" onSubmit={signIn}>
         <Field
           label="관리자 이메일"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           type="email"
           placeholder="admin@example.com"
-          autoComplete="email"
+          autoComplete="username"
         />
 
-        {sent ? (
-          <Alert tone="success">입력한 이메일로 로그인 링크를 보냈습니다.</Alert>
-        ) : null}
+        <Field
+          label="비밀번호"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          type="password"
+          placeholder="••••••••"
+          autoComplete="current-password"
+        />
+
         {error ? <Alert>{error}</Alert> : null}
 
         <Button type="submit" disabled={loading}>
-          <Mail size={18} aria-hidden="true" />
-          {loading ? "발송 중" : "매직 링크 받기"}
+          <LogIn size={18} aria-hidden="true" />
+          {loading ? "로그인 중" : "로그인"}
         </Button>
       </form>
     </Panel>
