@@ -7,15 +7,24 @@
 > - **현행 라이브 DB는 모든 테이블/함수를 `public`이 아니라 `app_open_vote` 스키마에 둡니다.** Supabase 프로젝트가 bluerdot 모노레포로 이전되면서 스키마가 분리되었고(`core`, `app_open_vote`, `app_nozolink` 등 단일 DB 공유), 앱 코드도 `db: { schema: "app_open_vote" }`로 라우팅합니다([src/lib/supabase/server.ts](../src/lib/supabase/server.ts)).
 > - **이 스키마는 모노레포의 마이그레이션이 소유합니다.** 라이브 DB에 적용된 마이그레이션은 `20260621070259_core_schema`, `20260621070439_app_open_vote_schema` 둘뿐이며, `app_open_vote` 스키마(테이블·체인 컬럼·RPC·`elections.status`의 4개 상태 제약 포함)가 이미 완비되어 있습니다.
 > - ⚠️ **이 리포의 `public` 대상 마이그레이션은 레거시입니다.** `001_initial_schema.sql` · `002_functions.sql` · `003_complete_schema.sql` · `20260518*.sql` · `setup.sql` · `setup.combined.sql`은 독립형(standalone) `public` 스키마 배포 시절의 산물로, **현행 DB에 실행하면 `relation "elections" does not exist`로 실패**합니다. 실행하지 마세요(과거 기록 보관용).
-> - 현행 DB에 안전하게 실행 가능한 유일한 스크립트는 [20260622000000_app_open_vote_status_constraint.sql](migrations/20260622000000_app_open_vote_status_constraint.sql)이며, `app_open_vote.elections.status`의 `paused` 허용을 보장하는 멱등 스크립트입니다(이미 충족 시 no-op).
-> - 아래 7장 이하의 Flutter / `voter_codes`(6자리 코드 + 전화번호 뒷자리) 안내는 **레거시**입니다. 현행 웹앱은 **Supabase Auth 매직 링크 + `voter_registry`** 모델을 사용합니다.
-> - **관리자 권한**: 관리자 전용 API(`/api/elections` 생성·상태변경, 유권자 명부 조회, 매직 링크 발송)는 로그인 사용자의 **`app_metadata.role = "admin"`** 클레임으로만 인가됩니다. 부여 예시:
+> - 현행 DB에 안전하게 실행 가능한 스크립트는 다음 두 개뿐이며 모두 멱등입니다(이미 충족 시 no-op).
+>   1. [20260622000000_app_open_vote_status_constraint.sql](migrations/20260622000000_app_open_vote_status_constraint.sql) — `app_open_vote.elections.status`의 `paused` 허용 보장
+>   2. [20260705000001_app_open_vote_sms_billing.sql](migrations/20260705000001_app_open_vote_sms_billing.sql) — **SMS 투표 링크 + 포인트 과금 모델**: `voter_registry`에 `phone`/`voter_name`/`access_token_hash` 추가(이메일 또는 전화 필수로 완화), `credit_accounts`/`credit_transactions`/`api_clients` 테이블, `create_billed_election`/`cast_link_vote`/`adjust_credits`/`rotate_voter_tokens`/`find_user_id_by_email` RPC
+> - 아래 7장 이하의 Flutter / `voter_codes`(6자리 코드 + 전화번호 뒷자리) 안내는 **레거시**입니다. 현행 웹앱은 **문자(SMS) 투표 링크 토큰 + `voter_registry`** 모델(이메일 매직 링크 병행)을 사용합니다.
+> - **권한 롤**: 투표 생성 API는 로그인 사용자의 **`app_metadata.role`** 클레임으로만 인가됩니다.
+>   `admin`은 모든 선거 관리 + 포인트 지급 + API 키 발급, `creator`는 자신이 만든 선거만 관리합니다. 부여 예시:
 >   ```sql
 >   -- 특정 사용자를 관리자로 지정 (service_role 권한으로 실행)
 >   UPDATE auth.users
 >   SET raw_app_meta_data =
 >       coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
 >   WHERE email = 'admin@example.com';
+>
+>   -- 투표 생성 권한만 부여 (자기 선거만 관리)
+>   UPDATE auth.users
+>   SET raw_app_meta_data =
+>       coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role":"creator"}'::jsonb
+>   WHERE email = 'creator@example.com';
 >   ```
 >   `app_metadata`는 사용자가 클라이언트에서 수정할 수 없어 권한 상승을 막습니다. `user_metadata`는 사용하지 마세요.
 

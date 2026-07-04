@@ -5,6 +5,7 @@ import { getRequestUser, getUserEmail } from "@/lib/supabase/auth";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { normalizeCandidates } from "@/lib/utils";
 import { voteErrorStatus } from "@/lib/vote-status";
+import { hashVoterToken, isValidVoterTokenFormat } from "@/lib/voter-token";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +40,22 @@ export async function POST(request: Request) {
       return jsonError("필수 항목이 누락되었거나 형식이 올바르지 않습니다.", 400);
     }
 
-    const userInfo = await getRequestUser(request);
-    if (!userInfo) {
-      await recordFailedAttempt(ipAddress, endpoint);
-      return jsonError("로그인이 필요합니다.", 401, "unauthorized");
+    // 인증 경로 두 가지: SMS 투표 링크 토큰(voterToken) 또는 Supabase 세션(Bearer)
+    const voterToken =
+      typeof body.voterToken === "string" ? body.voterToken.trim() : "";
+
+    let userInfo = null;
+    if (voterToken) {
+      if (!isValidVoterTokenFormat(voterToken)) {
+        await recordFailedAttempt(ipAddress, endpoint);
+        return jsonError("유효하지 않은 투표 링크입니다.", 401, "invalid_token");
+      }
+    } else {
+      userInfo = await getRequestUser(request);
+      if (!userInfo) {
+        await recordFailedAttempt(ipAddress, endpoint);
+        return jsonError("로그인이 필요합니다.", 401, "unauthorized");
+      }
     }
 
     const supabase = getServiceSupabase();
@@ -67,13 +80,20 @@ export async function POST(request: Request) {
       return jsonError("선택할 수 없는 항목입니다.", 400, "invalid_candidate");
     }
 
-    const { data: result, error } = await supabase.rpc("cast_registered_vote", {
-      p_election_id: electionId,
-      p_user_id: userInfo.user.id,
-      p_user_email: getUserEmail(userInfo.user),
-      p_selected_candidate: selectedCandidate,
-      p_receipt_hash: receiptHash,
-    });
+    const { data: result, error } = voterToken
+      ? await supabase.rpc("cast_link_vote", {
+          p_election_id: electionId,
+          p_token_hash: hashVoterToken(voterToken),
+          p_selected_candidate: selectedCandidate,
+          p_receipt_hash: receiptHash,
+        })
+      : await supabase.rpc("cast_registered_vote", {
+          p_election_id: electionId,
+          p_user_id: userInfo!.user.id,
+          p_user_email: getUserEmail(userInfo!.user),
+          p_selected_candidate: selectedCandidate,
+          p_receipt_hash: receiptHash,
+        });
 
     if (error) {
       await recordFailedAttempt(ipAddress, endpoint);

@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
+  Coins,
   Download,
   ListChecks,
+  MessageSquareText,
   Plus,
   Trash2,
   Vote,
@@ -14,12 +16,14 @@ import { AdminGate } from "@/components/admin-gate";
 import { Alert, Button, Field, Panel, Textarea } from "@/components/ui";
 import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
-import type { Candidate, Election, VoterRegistry } from "@/lib/types";
+import type { Candidate, CreditsSummary, Election, VoterRegistry } from "@/lib/types";
 import { csvEscape } from "@/lib/utils";
+import { formatPhone, normalizePhone } from "@/lib/voters";
 
 type CreateResponse = {
   election: Election;
   voters: VoterRegistry[];
+  billing: { unitPrice: number; voterCount: number; cost: number; balance: number };
 };
 
 type OptionPreset = {
@@ -28,6 +32,8 @@ type OptionPreset = {
   description: string;
   items: string[];
 };
+
+type VoterMode = "sms" | "email";
 
 const optionPresets: OptionPreset[] = [
   {
@@ -66,6 +72,47 @@ function createOption(name: string): Candidate {
   };
 }
 
+/** "010-1234-5678,홍길동" 또는 "010-1234-5678 홍길동" 형식의 줄을 파싱 */
+function parsePhoneLines(text: string): {
+  voters: Array<{ phone: string; name?: string }>;
+  invalid: string[];
+} {
+  const voters: Array<{ phone: string; name?: string }> = [];
+  const invalid: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawLine of text.split(/\n/)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    const [first, ...rest] = line.split(/[,\t]/);
+    let phoneSource = first?.trim() ?? "";
+    let name = rest.join(" ").trim();
+
+    // 콤마 없이 "번호 이름" 형태도 허용
+    if (!name && /\s/.test(phoneSource)) {
+      const parts = phoneSource.split(/\s+/);
+      phoneSource = parts[0] ?? "";
+      name = parts.slice(1).join(" ");
+    }
+
+    const phone = normalizePhone(phoneSource);
+    if (!phone) {
+      invalid.push(line);
+      continue;
+    }
+    if (seen.has(phone)) {
+      continue;
+    }
+    seen.add(phone);
+    voters.push(name ? { phone, name } : { phone });
+  }
+
+  return { voters, invalid };
+}
+
 export default function AdminPage() {
   return (
     <AdminGate>
@@ -77,13 +124,37 @@ export default function AdminPage() {
 function AdminCreateForm() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [voterMode, setVoterMode] = useState<VoterMode>("sms");
+  const [voterPhones, setVoterPhones] = useState("");
   const [voterEmails, setVoterEmails] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState("custom");
+  const [credits, setCredits] = useState<CreditsSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<CreateResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fetchJson<CreditsSummary>("/api/credits", {
+          headers: await authHeaders(),
+        });
+        if (!cancelled) {
+          setCredits(data);
+        }
+      } catch {
+        // 잔액 표시는 부가 정보이므로 실패해도 폼은 사용 가능
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [created]);
+
+  const phoneParse = useMemo(() => parsePhoneLines(voterPhones), [voterPhones]);
 
   const voterEmailList = useMemo(
     () =>
@@ -97,6 +168,12 @@ function AdminCreateForm() {
       ),
     [voterEmails],
   );
+
+  const voterCount =
+    voterMode === "sms" ? phoneParse.voters.length : voterEmailList.length;
+  const unitPrice = credits?.unitPrice ?? 10;
+  const estimatedCost = voterCount * unitPrice;
+  const insufficient = credits !== null && estimatedCost > credits.balance;
 
   const votedCount = useMemo(
     () => created?.voters.filter((voter) => voter.has_voted).length ?? 0,
@@ -143,20 +220,32 @@ function AdminCreateForm() {
     setError("");
 
     try {
+      const payload: Record<string, unknown> = {
+        name,
+        description,
+        candidates: candidates
+          .map((candidate) => ({
+            ...candidate,
+            name: candidate.name.trim(),
+          }))
+          .filter((candidate) => candidate.name),
+      };
+
+      if (voterMode === "sms") {
+        if (phoneParse.invalid.length > 0) {
+          throw new Error(
+            `잘못된 전화번호 형식이 있습니다: ${phoneParse.invalid.slice(0, 3).join(" / ")}${phoneParse.invalid.length > 3 ? " 외" : ""}`,
+          );
+        }
+        payload.voters = phoneParse.voters;
+      } else {
+        payload.voterEmails = voterEmailList;
+      }
+
       const response = await fetchJson<CreateResponse>("/api/elections", {
         method: "POST",
         headers: await authHeaders(),
-        body: JSON.stringify({
-          name,
-          description,
-          voterEmails: voterEmailList,
-          candidates: candidates
-            .map((candidate) => ({
-              ...candidate,
-              name: candidate.name.trim(),
-            }))
-            .filter((candidate) => candidate.name),
-        }),
+        body: JSON.stringify(payload),
       });
 
       setCreated(response);
@@ -170,6 +259,7 @@ function AdminCreateForm() {
   function reset() {
     setName("");
     setDescription("");
+    setVoterPhones("");
     setVoterEmails("");
     setCandidateName("");
     setCandidates([]);
@@ -185,10 +275,11 @@ function AdminCreateForm() {
 
     const lines = [
       `선거명: ${csvEscape(created.election.name)}`,
-      "이메일,투표여부,매직링크발송시각,투표시각",
+      "연락처,이름,투표여부,링크발송시각,투표시각",
       ...created.voters.map((voter) =>
         [
-          csvEscape(voter.email),
+          csvEscape(voter.phone ? formatPhone(voter.phone) : (voter.email ?? "")),
+          csvEscape(voter.voter_name ?? ""),
           csvEscape(voter.has_voted ? "투표완료" : "투표전"),
           csvEscape(voter.invited_at),
           csvEscape(voter.voted_at),
@@ -224,8 +315,11 @@ function AdminCreateForm() {
         </div>
 
         <Alert tone="success">
-          유권자 {created.voters.length}명이 등록되었습니다. 선거는 준비중 상태로
-          생성되며, 선거 관리에서 진행중으로 전환한 뒤 매직 링크를 발송할 수 있습니다.
+          유권자 {created.voters.length}명이 등록되었고 포인트{" "}
+          {created.billing.cost.toLocaleString()}P가 차감되었습니다 (잔액{" "}
+          {created.billing.balance.toLocaleString()}P). 선거는 준비중 상태로
+          생성되며, 선거 관리에서 진행중으로 전환한 뒤 투표 링크 문자를 발송할 수
+          있습니다.
         </Alert>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -239,7 +333,7 @@ function AdminCreateForm() {
             <div>
               <h2 className="text-lg font-semibold">유권자 명부 파일</h2>
               <p className="mt-1 text-sm text-slate-500">
-                CSV 파일에는 이메일과 참여 상태만 포함되며 투표 내용은 포함되지 않습니다.
+                CSV 파일에는 연락처와 참여 상태만 포함되며 투표 내용은 포함되지 않습니다.
               </p>
             </div>
             <Button onClick={downloadCsv}>
@@ -252,15 +346,19 @@ function AdminCreateForm() {
             <table className="w-full min-w-[480px] text-left text-sm">
               <thead className="bg-slate-50 text-slate-500">
                 <tr>
-                  <th className="px-4 py-3 font-medium">이메일</th>
+                  <th className="px-4 py-3 font-medium">연락처</th>
+                  <th className="px-4 py-3 font-medium">이름</th>
                   <th className="px-4 py-3 font-medium">투표 여부</th>
-                  <th className="px-4 py-3 font-medium">매직 링크</th>
+                  <th className="px-4 py-3 font-medium">링크 발송</th>
                 </tr>
               </thead>
               <tbody>
                 {created.voters.map((voter) => (
                   <tr key={voter.id} className="border-t border-[var(--border)]">
-                    <td className="px-4 py-3 text-slate-950">{voter.email}</td>
+                    <td className="px-4 py-3 text-slate-950">
+                      {voter.phone ? formatPhone(voter.phone) : voter.email}
+                    </td>
+                    <td className="px-4 py-3">{voter.voter_name ?? "-"}</td>
                     <td className="px-4 py-3">
                       {voter.has_voted ? "투표완료" : "투표전"}
                     </td>
@@ -278,7 +376,7 @@ function AdminCreateForm() {
             className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           >
             <ListChecks size={18} aria-hidden="true" />
-            선거 관리
+            선거 관리 (문자 발송)
           </Link>
           <Link
             href="/dashboard"
@@ -298,8 +396,9 @@ function AdminCreateForm() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-slate-950">새 투표 생성</h1>
-              <p className="mt-1 text-sm text-slate-500">
-              투표 항목과 유권자 이메일 명부를 등록하면 패스워드리스 투표가 준비됩니다.
+            <p className="mt-1 text-sm text-slate-500">
+              투표 항목과 유권자 명부를 등록하면 문자(SMS)로 1인 1투표 링크를
+              발송할 수 있습니다.
             </p>
           </div>
           <Link
@@ -325,12 +424,60 @@ function AdminCreateForm() {
               onChange={(event) => setDescription(event.target.value)}
               placeholder="투표에 대한 간단한 설명"
             />
-            <Textarea
-              label="유권자 이메일"
-              value={voterEmails}
-              onChange={(event) => setVoterEmails(event.target.value)}
-              placeholder={"voter1@example.com\nvoter2@example.com"}
-            />
+
+            <div className="grid gap-2">
+              <span className="text-sm font-medium text-slate-700">유권자 명부</span>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  className={
+                    voterMode === "sms"
+                      ? "border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100"
+                      : ""
+                  }
+                  onClick={() => setVoterMode("sms")}
+                >
+                  <MessageSquareText size={17} aria-hidden="true" />
+                  휴대폰 번호 (문자 발송)
+                </Button>
+                <Button
+                  variant="secondary"
+                  className={
+                    voterMode === "email"
+                      ? "border-blue-300 bg-blue-50 text-blue-900 hover:bg-blue-100"
+                      : ""
+                  }
+                  onClick={() => setVoterMode("email")}
+                >
+                  이메일 (매직 링크)
+                </Button>
+              </div>
+
+              {voterMode === "sms" ? (
+                <>
+                  <Textarea
+                    label="휴대폰 번호 목록 (한 줄에 한 명, 번호 뒤에 쉼표로 이름 추가 가능)"
+                    value={voterPhones}
+                    onChange={(event) => setVoterPhones(event.target.value)}
+                    placeholder={"010-1234-5678,홍길동\n010-9876-5432"}
+                  />
+                  {phoneParse.invalid.length > 0 ? (
+                    <Alert tone="warning">
+                      잘못된 형식 {phoneParse.invalid.length}건:{" "}
+                      {phoneParse.invalid.slice(0, 3).join(" / ")}
+                      {phoneParse.invalid.length > 3 ? " 외" : ""}
+                    </Alert>
+                  ) : null}
+                </>
+              ) : (
+                <Textarea
+                  label="유권자 이메일 (줄바꿈/쉼표 구분)"
+                  value={voterEmails}
+                  onChange={(event) => setVoterEmails(event.target.value)}
+                  placeholder={"voter1@example.com\nvoter2@example.com"}
+                />
+              )}
+            </div>
 
             <div className="rounded-lg border border-[var(--border)] bg-slate-50 p-4">
               <div className="grid gap-4">
@@ -435,10 +582,25 @@ function AdminCreateForm() {
             </div>
 
             {error ? <Alert>{error}</Alert> : null}
+            {insufficient ? (
+              <Alert tone="warning">
+                포인트 잔액이 부족합니다. 필요 {estimatedCost.toLocaleString()}P,
+                보유 {credits?.balance.toLocaleString()}P —{" "}
+                <Link href="/admin/credits" className="font-semibold underline">
+                  포인트 충전 안내
+                </Link>
+              </Alert>
+            ) : null}
 
-            <Button onClick={submit} disabled={loading} className="w-full sm:w-fit">
+            <Button
+              onClick={submit}
+              disabled={loading || insufficient}
+              className="w-full sm:w-fit"
+            >
               <CheckCircle2 size={18} aria-hidden="true" />
-              {loading ? "생성 중" : "투표 생성 및 유권자 등록"}
+              {loading
+                ? "생성 중"
+                : `투표 생성 (${estimatedCost.toLocaleString()}P 차감)`}
             </Button>
           </div>
         </Panel>
@@ -449,13 +611,28 @@ function AdminCreateForm() {
           <h2 className="text-lg font-semibold">생성 전 확인</h2>
           <dl className="mt-4 grid gap-3 text-sm">
             <Row label="항목" value={`${candidates.length}개`} />
-            <Row label="유권자" value={`${voterEmailList.length}명`} />
+            <Row label="유권자" value={`${voterCount}명`} />
+            <Row
+              label={`예상 비용 (1인 ${unitPrice}P)`}
+              value={`${estimatedCost.toLocaleString()}P`}
+            />
+            <Row
+              label="포인트 잔액"
+              value={credits ? `${credits.balance.toLocaleString()}P` : "확인 중"}
+            />
             <Row label="초기 상태" value="준비중" />
           </dl>
+          <Link
+            href="/admin/credits"
+            className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+          >
+            <Coins size={17} aria-hidden="true" />
+            포인트 관리
+          </Link>
         </Panel>
         <Alert tone="info">
-          동일한 화면으로 후보 선출, 찬반 의결, 복수 안건 선택형 투표를 모두 만들
-          수 있습니다.
+          투표 생성 시 유권자 1인당 {unitPrice}P가 선불 포인트에서 차감됩니다.
+          문자 발송은 생성 후 선거를 진행중으로 전환한 뒤 시작할 수 있습니다.
         </Alert>
         <Alert tone="info">
           유권자 명부와 투표용지는 데이터베이스에서 연결되지 않습니다. 실제 투표는

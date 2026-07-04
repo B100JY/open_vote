@@ -2304,6 +2304,36 @@ export type Database = {
   }
   app_open_vote: {
     Tables: {
+      api_clients: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          key_hash: string
+          last_used_at: string | null
+          name: string
+          owner_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key_hash: string
+          last_used_at?: string | null
+          name: string
+          owner_user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          key_hash?: string
+          last_used_at?: string | null
+          name?: string
+          owner_user_id?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           created_at: string
@@ -2362,6 +2392,71 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "ballots_election_id_fkey"
+            columns: ["election_id"]
+            isOneToOne: false
+            referencedRelation: "elections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      credit_accounts: {
+        Row: {
+          balance: number
+          created_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      credit_transactions: {
+        Row: {
+          amount: number
+          balance_after: number
+          created_at: string
+          created_by: string | null
+          election_id: string | null
+          id: string
+          memo: string | null
+          tx_type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          created_at?: string
+          created_by?: string | null
+          election_id?: string | null
+          id?: string
+          memo?: string | null
+          tx_type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          created_at?: string
+          created_by?: string | null
+          election_id?: string | null
+          id?: string
+          memo?: string | null
+          tx_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_transactions_election_id_fkey"
             columns: ["election_id"]
             isOneToOne: false
             referencedRelation: "elections"
@@ -2481,37 +2576,46 @@ export type Database = {
       }
       voter_registry: {
         Row: {
+          access_token_hash: string | null
           created_at: string
           election_id: string
-          email: string
+          email: string | null
           has_voted: boolean
           id: string
           invited_at: string | null
+          phone: string | null
           updated_at: string
           user_id: string | null
           voted_at: string | null
+          voter_name: string | null
         }
         Insert: {
+          access_token_hash?: string | null
           created_at?: string
           election_id: string
-          email: string
+          email?: string | null
           has_voted?: boolean
           id?: string
           invited_at?: string | null
+          phone?: string | null
           updated_at?: string
           user_id?: string | null
           voted_at?: string | null
+          voter_name?: string | null
         }
         Update: {
+          access_token_hash?: string | null
           created_at?: string
           election_id?: string
-          email?: string
+          email?: string | null
           has_voted?: boolean
           id?: string
           invited_at?: string | null
+          phone?: string | null
           updated_at?: string
           user_id?: string | null
           voted_at?: string | null
+          voter_name?: string | null
         }
         Relationships: [
           {
@@ -2528,12 +2632,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adjust_credits: {
+        Args: {
+          p_actor?: string
+          p_amount: number
+          p_memo?: string
+          p_tx_type: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       cast_anonymous_vote: {
         Args: {
           p_code: string
           p_election_id: string
           p_phone_suffix: string
           p_selected_candidate: string
+        }
+        Returns: Json
+      }
+      cast_link_vote: {
+        Args: {
+          p_election_id: string
+          p_receipt_hash: string
+          p_selected_candidate: string
+          p_token_hash: string
         }
         Returns: Json
       }
@@ -2557,6 +2680,23 @@ export type Database = {
             }
             Returns: Json
           }
+      create_billed_election: {
+        Args: {
+          p_candidates: Json
+          p_creator: string
+          p_description: string
+          p_ends_at?: string
+          p_name: string
+          p_starts_at?: string
+          p_unit_price: number
+          p_voters: Json
+        }
+        Returns: Json
+      }
+      find_user_id_by_email: {
+        Args: { p_email: string }
+        Returns: string
+      }
       generate_voter_codes_batch: {
         Args: {
           p_count: number
@@ -2583,6 +2723,10 @@ export type Database = {
           p_max_attempts: number
         }
         Returns: undefined
+      }
+      rotate_voter_tokens: {
+        Args: { p_election_id: string; p_tokens: Json }
+        Returns: number
       }
     }
     Enums: {

@@ -7,22 +7,30 @@ import {
   CheckCircle2,
   Download,
   Mail,
+  MessageSquareText,
   Pause,
   Play,
   RefreshCw,
+  RotateCcw,
   Square,
 } from "lucide-react";
 import { AdminGate } from "@/components/admin-gate";
 import { Alert, Badge, Button, EmptyState, Panel } from "@/components/ui";
 import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
-import type { Election, ElectionStatus, VoterRegistry } from "@/lib/types";
+import type {
+  Election,
+  ElectionStatus,
+  SmsInviteResponse,
+  VoterRegistry,
+} from "@/lib/types";
 import {
   csvEscape,
   formatDate,
   statusLabel,
   statusTone,
 } from "@/lib/utils";
+import { formatPhone } from "@/lib/voters";
 
 type CodesResponse = {
   election: { id: string; name: string } | null;
@@ -42,6 +50,8 @@ function ManageElections() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState("");
   const [invitingId, setInvitingId] = useState("");
+  const [smsSendingId, setSmsSendingId] = useState("");
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
@@ -89,10 +99,11 @@ function ManageElections() {
       );
       const lines = [
         `선거명: ${csvEscape(election.name)}`,
-        "이메일,투표여부,매직링크발송시각,투표시각",
+        "연락처,이름,투표여부,링크발송시각,투표시각",
         ...data.voters.map((voter) =>
           [
-            csvEscape(voter.email),
+            csvEscape(voter.phone ? formatPhone(voter.phone) : (voter.email ?? "")),
+            csvEscape(voter.voter_name ?? ""),
             csvEscape(voter.has_voted ? "투표완료" : "투표전"),
             csvEscape(voter.invited_at),
             csvEscape(voter.voted_at),
@@ -119,6 +130,7 @@ function ManageElections() {
   async function sendMagicLinks(election: Election) {
     setInvitingId(election.id);
     setError("");
+    setNotice("");
     try {
       const result = await fetchJson<{ sent: number; failed: number }>(
         `/api/elections/${election.id}/participants/invite`,
@@ -129,11 +141,57 @@ function ManageElections() {
         setError(
           `매직 링크 ${result.sent}건 발송, ${result.failed}건 실패했습니다. Supabase Auth 이메일 설정을 확인해주세요.`,
         );
+      } else {
+        setNotice(`매직 링크 ${result.sent}건을 발송했습니다.`);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "매직 링크 발송에 실패했습니다.");
     } finally {
       setInvitingId("");
+    }
+  }
+
+  async function sendSmsInvites(election: Election, resendAll: boolean) {
+    if (resendAll) {
+      const confirmed = window.confirm(
+        "이미 발송한 유권자를 포함해 미투표 전원에게 새 링크를 재발송합니다.\n재발송하면 이전 문자의 링크는 무효화됩니다. 계속할까요?",
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setSmsSendingId(election.id);
+    setError("");
+    setNotice("");
+    try {
+      const result = await fetchJson<SmsInviteResponse>(
+        `/api/elections/${election.id}/participants/sms-invite`,
+        {
+          method: "POST",
+          headers: await authHeaders(),
+          body: JSON.stringify({ resendAll }),
+        },
+      );
+      await load();
+
+      if (result.requested === 0) {
+        setNotice(
+          resendAll
+            ? "발송 대상(전화번호가 있는 미투표 유권자)이 없습니다."
+            : "새로 발송할 대상이 없습니다. 전원 발송된 상태라면 재발송을 이용해주세요.",
+        );
+      } else if (result.failed > 0 || result.skipped > 0) {
+        setError(
+          `문자 ${result.sent}건 발송, 실패 ${result.failed}건, 건너뜀 ${result.skipped}건. 실패 대상은 다시 발송을 시도해주세요.`,
+        );
+      } else {
+        setNotice(`투표 링크 문자 ${result.sent}건을 발송했습니다.`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "문자 발송에 실패했습니다.");
+    } finally {
+      setSmsSendingId("");
     }
   }
 
@@ -157,6 +215,7 @@ function ManageElections() {
       </div>
 
       {error ? <Alert>{error}</Alert> : null}
+      {notice ? <Alert tone="success">{notice}</Alert> : null}
 
       {loading ? (
         <div className="grid gap-3">
@@ -205,14 +264,32 @@ function ManageElections() {
                     CSV
                   </Button>
                   {election.status === "active" ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => sendMagicLinks(election)}
-                      disabled={invitingId === election.id}
-                    >
-                      <Mail size={17} aria-hidden="true" />
-                      링크 발송
-                    </Button>
+                    <>
+                      <Button
+                        onClick={() => sendSmsInvites(election, false)}
+                        disabled={smsSendingId === election.id}
+                      >
+                        <MessageSquareText size={17} aria-hidden="true" />
+                        {smsSendingId === election.id ? "발송 중" : "문자 발송"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => sendSmsInvites(election, true)}
+                        disabled={smsSendingId === election.id}
+                        title="미투표 전원에게 새 링크 재발송 (이전 링크 무효화)"
+                      >
+                        <RotateCcw size={17} aria-hidden="true" />
+                        재발송
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => sendMagicLinks(election)}
+                        disabled={invitingId === election.id}
+                      >
+                        <Mail size={17} aria-hidden="true" />
+                        이메일 링크
+                      </Button>
+                    </>
                   ) : null}
                   {election.status === "draft" ? (
                     <Button
