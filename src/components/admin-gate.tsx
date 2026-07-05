@@ -3,18 +3,19 @@
 import { useEffect, useState } from "react";
 import { LogOut, Mail, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Alert, Button, Field, Panel } from "@/components/ui";
-import { isAdminUser } from "@/lib/admin-role";
+import { isVoteCreator } from "@/lib/admin-role";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 
 type GateState = "checking" | "anonymous" | "forbidden" | "admin";
 
 /**
- * 관리자 전용 페이지를 감싸는 게이트.
+ * 관리 페이지(투표 생성·선거 관리·포인트)를 감싸는 게이트.
  * - 비로그인: 매직 링크 로그인 폼 표시
- * - 로그인했으나 admin 권한 없음: 안내 + 로그아웃
- * - admin: children 렌더링
+ * - 로그인했으나 권한(admin/creator) 없음: 안내 + 로그아웃
+ * - admin 또는 creator: children 렌더링
  *
- * 클라이언트 게이트는 UX용이며, 실제 인가는 서버의 requireAdmin이 강제합니다.
+ * 클라이언트 게이트는 UX용이며, 실제 인가는 서버의 requireAdmin /
+ * requireVoteCreator가 강제합니다.
  */
 export function AdminGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GateState>("checking");
@@ -32,12 +33,12 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     }
 
     function evaluate(session: { user?: unknown } | null) {
-      const user = session?.user as Parameters<typeof isAdminUser>[0];
+      const user = session?.user as Parameters<typeof isVoteCreator>[0];
       if (!user) {
         setState("anonymous");
         return;
       }
-      setState(isAdminUser(user) ? "admin" : "forbidden");
+      setState(isVoteCreator(user) ? "admin" : "forbidden");
     }
 
     supabase.auth
@@ -112,10 +113,10 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
     return (
       <Panel className="mx-auto max-w-md p-6 text-center">
         <ShieldAlert className="mx-auto text-amber-600" size={40} aria-hidden="true" />
-        <h1 className="mt-4 text-lg font-semibold">관리자 권한이 없습니다</h1>
+        <h1 className="mt-4 text-lg font-semibold">투표 생성 권한이 없습니다</h1>
         <p className="mt-2 text-sm leading-6 text-slate-500">
-          현재 계정에는 관리자 권한이 없습니다. 관리자 권한이 있는 계정으로 다시
-          로그인해주세요.
+          현재 계정에는 투표 생성 권한(관리자 또는 생성자)이 없습니다. 권한이
+          있는 계정으로 다시 로그인하거나 운영자에게 권한을 요청해주세요.
         </p>
         <Button variant="secondary" className="mt-5" onClick={signOut}>
           <LogOut size={18} aria-hidden="true" />
@@ -132,16 +133,17 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
           <ShieldCheck size={22} aria-hidden="true" />
         </span>
         <div>
-          <h1 className="text-lg font-semibold text-slate-950">관리자 로그인</h1>
+          <h1 className="text-lg font-semibold text-slate-950">관리 로그인</h1>
           <p className="mt-1 text-sm leading-6 text-slate-500">
-            관리 기능은 매직 링크로 로그인한 관리자만 사용할 수 있습니다.
+            투표 생성·관리 기능은 매직 링크로 로그인한 권한 계정(관리자/생성자)만
+            사용할 수 있습니다.
           </p>
         </div>
       </div>
 
       <form className="grid gap-4" onSubmit={sendMagicLink}>
         <Field
-          label="관리자 이메일"
+          label="이메일"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           type="email"
