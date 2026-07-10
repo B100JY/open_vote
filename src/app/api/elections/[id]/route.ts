@@ -26,7 +26,19 @@ export async function GET(
       return jsonError("선거 정보를 찾을 수 없습니다.", 404, error?.message);
     }
 
-    return NextResponse.json({ election: normalizeElection(data) });
+    // 집계 수치만 노출한다(익명성 유지: 표 내용/후보별 득표 비노출).
+    //  - cast_count : 총 투표수(ballots) — 연동 앱의 "수정/삭제 가능" 판단에 사용.
+    //  - voter_count: 명부 규모(voter_registry).
+    const [{ count: castCount }, { count: voterCount }] = await Promise.all([
+      supabase.from("ballots").select("id", { count: "exact", head: true }).eq("election_id", id),
+      supabase.from("voter_registry").select("id", { count: "exact", head: true }).eq("election_id", id),
+    ]);
+
+    return NextResponse.json({
+      election: normalizeElection(data),
+      cast_count: castCount ?? 0,
+      voter_count: voterCount ?? 0,
+    });
   } catch (error) {
     return jsonError(
       error instanceof Error ? error.message : "선거 정보를 불러오지 못했습니다.",
