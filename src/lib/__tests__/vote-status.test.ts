@@ -14,6 +14,10 @@ test("미등록 유권자는 401을 반환한다", () => {
   assert.equal(voteErrorStatus("not_registered"), 401);
 });
 
+test("유효하지 않은 투표 링크 토큰은 401을 반환한다", () => {
+  assert.equal(voteErrorStatus("invalid_token"), 401);
+});
+
 test("선거가 진행 중이 아니면 403을 반환한다", () => {
   assert.equal(voteErrorStatus("election_not_active"), 403);
   assert.equal(voteErrorStatus("election_not_found"), 403);

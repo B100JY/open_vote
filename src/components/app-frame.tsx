@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   BarChart3,
   ClipboardList,
+  Coins,
   Home,
   LayoutDashboard,
   ShieldCheck,
@@ -15,6 +16,7 @@ const navItems = [
   { href: "/results", label: "결과", icon: BarChart3 },
   { href: "/verify", label: "검증", icon: ShieldCheck },
   { href: "/admin", label: "관리", icon: ClipboardList },
+  { href: "/admin/credits", label: "포인트", icon: Coins },
 ];
 
 export function AppFrame({ children }: { children: React.ReactNode }) {

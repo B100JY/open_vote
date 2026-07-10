@@ -23,12 +23,46 @@ export type VoterRegistry = {
   id: string;
   election_id: string;
   user_id: string | null;
-  email: string;
+  email: string | null;
+  phone: string | null;
+  voter_name: string | null;
   has_voted: boolean;
   invited_at: string | null;
   voted_at: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type CreditTransaction = {
+  id: string;
+  amount: number;
+  balance_after: number;
+  tx_type: "charge" | "vote_creation" | "refund" | "admin_adjust" | string;
+  election_id: string | null;
+  memo: string | null;
+  created_at: string;
+};
+
+export type CreditsSummary = {
+  balance: number;
+  unitPrice: number;
+  isAdmin: boolean;
+  transactions: CreditTransaction[];
+};
+
+export type SmsInviteResponse = {
+  requested: number;
+  sent: number;
+  failed: number;
+  skipped: number;
+  dryRun: boolean;
+  batchId: string | null;
+  failures: Array<{
+    ref: string | null;
+    phone: string;
+    status: string;
+    reason?: string | null;
+  }>;
 };
 
 export type ElectionStats = {

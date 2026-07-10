@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ArrowLeft, Coins, Search } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, Coins, KeyRound, Plus, Search } from "lucide-react";
 import { AdminGate } from "@/components/admin-gate";
-import { Alert, Button, Field, Panel } from "@/components/ui";
+import { Alert, Badge, Button, Field, Panel } from "@/components/ui";
 import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
+import { formatDate } from "@/lib/utils";
 
 type LedgerRow = {
   id: string;
@@ -25,10 +26,22 @@ type CreditsResponse = {
   ledger: LedgerRow[];
 };
 
+type ApiClientRow = {
+  id: string;
+  name: string;
+  owner_user_id: string;
+  is_active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+};
+
 export default function CreditsPage() {
   return (
     <AdminGate>
       <Credits />
+      <div className="mx-auto mt-5 grid max-w-2xl gap-5">
+        <ApiClientsPanel />
+      </div>
     </AdminGate>
   );
 }
@@ -165,5 +178,158 @@ function Credits() {
         </Panel>
       ) : null}
     </div>
+  );
+}
+
+function ApiClientsPanel() {
+  const [clients, setClients] = useState<ApiClientRow[]>([]);
+  const [name, setName] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState("");
+  const [issuedKey, setIssuedKey] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const data = await fetchJson<{ clients: ApiClientRow[] }>(
+        "/api/admin/api-clients",
+        { headers: await authHeaders() },
+      );
+      setClients(data.clients);
+    } catch {
+      // 목록 로드는 부가 기능이므로 조용히 무시
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function create(event: React.FormEvent) {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    setIssuedKey("");
+    try {
+      const result = await fetchJson<{ apiKey: string }>("/api/admin/api-clients", {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({ name, ownerEmail }),
+      });
+      setIssuedKey(result.apiKey);
+      setName("");
+      setOwnerEmail("");
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "API 키 발급에 실패했습니다.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function toggle(client: ApiClientRow) {
+    try {
+      await fetchJson(`/api/admin/api-clients/${client.id}`, {
+        method: "PATCH",
+        headers: await authHeaders(),
+        body: JSON.stringify({ isActive: !client.is_active }),
+      });
+      await load();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "API 클라이언트 변경에 실패했습니다.",
+      );
+    }
+  }
+
+  return (
+    <Panel className="p-5">
+      <div className="flex items-start gap-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+          <KeyRound size={22} aria-hidden="true" />
+        </span>
+        <div>
+          <h2 className="text-lg font-semibold">외부 앱 연동 (API 키)</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            다른 앱이 <code className="rounded bg-slate-100 px-1">POST /api/v1/elections</code>
+            로 투표를 생성할 수 있는 키를 발급합니다. 연동 선거는 연동 조합
+            지갑에서 유권자 수만큼 포인트가 차감됩니다.
+          </p>
+        </div>
+      </div>
+
+      <form className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={create}>
+        <Field
+          label="클라이언트 이름"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="예: 조합 관리 시스템"
+        />
+        <Field
+          label="소유자(과금) 이메일"
+          type="email"
+          value={ownerEmail}
+          onChange={(event) => setOwnerEmail(event.target.value)}
+          placeholder="owner@example.com"
+        />
+        <Button type="submit" disabled={submitting || !name || !ownerEmail}>
+          <Plus size={17} aria-hidden="true" />
+          키 발급
+        </Button>
+      </form>
+
+      {issuedKey ? (
+        <Alert tone="warning">
+          발급된 API 키(지금 한 번만 표시됩니다):{" "}
+          <code className="break-all font-mono text-xs">{issuedKey}</code>
+        </Alert>
+      ) : null}
+      {error ? <Alert>{error}</Alert> : null}
+
+      {clients.length > 0 ? (
+        <div className="mt-4 overflow-auto rounded-lg border border-[var(--border)]">
+          <table className="w-full min-w-[520px] text-left text-sm">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="px-4 py-3 font-medium">이름</th>
+                <th className="px-4 py-3 font-medium">상태</th>
+                <th className="px-4 py-3 font-medium">마지막 사용</th>
+                <th className="px-4 py-3 font-medium">발급일</th>
+                <th className="px-4 py-3 font-medium" />
+              </tr>
+            </thead>
+            <tbody>
+              {clients.map((client) => (
+                <tr key={client.id} className="border-t border-[var(--border)]">
+                  <td className="px-4 py-3 text-slate-950">{client.name}</td>
+                  <td className="px-4 py-3">
+                    <Badge
+                      className={
+                        client.is_active
+                          ? "border-emerald-200 bg-emerald-100 text-emerald-800"
+                          : "border-slate-300 bg-slate-200 text-slate-700"
+                      }
+                    >
+                      {client.is_active ? "활성" : "비활성"}
+                    </Badge>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {client.last_used_at ? formatDate(client.last_used_at) : "-"}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">{formatDate(client.created_at)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Button variant="secondary" onClick={() => toggle(client)}>
+                      {client.is_active ? "비활성화" : "활성화"}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </Panel>
   );
 }
