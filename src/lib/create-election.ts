@@ -70,6 +70,10 @@ export { cleanCandidatesInput };
  * 선거 + 유권자 명부 생성과 포인트 차감(유권자 1인당 단가)을
  * DB 함수(create_billed_election) 한 트랜잭션으로 처리합니다.
  * 잔액 부족 시 아무것도 생성되지 않고 402를 반환합니다.
+ *
+ * [과금 모델] 이 경로는 "소유자 포인트"(point_wallets) 기반의 독립형 선거 과금이다
+ * (관리자/생성자가 웹앱에서 직접 생성 → POST /api/elections). nozolink 연동 선거는
+ * 조합 지갑(union_point_wallets) 기반의 create_election_with_billing 을 쓴다.
  */
 export async function createBilledElection(
   input: CreateElectionInput,

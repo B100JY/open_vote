@@ -65,6 +65,10 @@ export async function GET(request: Request) {
   }
 }
 
+// [과금 모델] 독립형 관리자/생성자 선거 생성 (세션 인증, requireVoteCreator).
+// 유권자 수 × 단가를 생성자 개인 "소유자 포인트"(point_wallets)에서 선불 차감한다
+// (createBilledElection → create_billed_election). nozolink 연동 선거는 별도 경로
+// (POST /api/v1/elections, 조합 지갑 과금)를 쓴다.
 export async function POST(request: Request) {
   try {
     const auth = await requireVoteCreator(request);
