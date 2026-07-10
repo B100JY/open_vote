@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getClientIp, jsonError } from "@/lib/api-response";
 import { recordFailedAttempt, checkRateLimit } from "@/lib/rate-limit";
 import { getRequestUser, getUserEmail } from "@/lib/supabase/auth";
-import { getServiceSupabase } from "@/lib/supabase/server";
+import { getServiceDbSupabase } from "@/lib/supabase/server";
 import { normalizeCandidates } from "@/lib/utils";
 import { voteErrorStatus } from "@/lib/vote-status";
 
@@ -45,12 +45,12 @@ export async function POST(request: Request) {
       return jsonError("로그인이 필요합니다.", 401, "unauthorized");
     }
 
-    const supabase = getServiceSupabase();
+    const supabase = getServiceDbSupabase();
     const { data: election, error: electionError } = await supabase
       .from("elections")
-      .select("id, status, candidates")
+      .select("id, status, candidates, auth_mode, ends_at")
       .eq("id", electionId)
-      .single();
+      .single<{ id: string; status: string; candidates: unknown; auth_mode: string; ends_at: string | null }>();
 
     if (electionError || !election || election.status !== "active") {
       await recordFailedAttempt(ipAddress, endpoint);
@@ -61,19 +61,42 @@ export async function POST(request: Request) {
       );
     }
 
+    if (election.ends_at && new Date(election.ends_at).getTime() < Date.now()) {
+      await recordFailedAttempt(ipAddress, endpoint);
+      return jsonError("투표 기간이 마감되었습니다.", 403, "election_ended");
+    }
+
+    // sms_token 방식은 세션이 아니라 1회용 링크(/api/vote/link)로만 투표한다.
+    if (election.auth_mode === "sms_token") {
+      await recordFailedAttempt(ipAddress, endpoint);
+      return jsonError(
+        "이 투표는 문자로 받은 개별 링크로만 참여할 수 있습니다.",
+        403,
+        "auth_mode_mismatch",
+      );
+    }
+
     const candidates = normalizeCandidates(election.candidates);
     if (!candidates.some((candidate) => candidate.id === selectedCandidate)) {
       await recordFailedAttempt(ipAddress, endpoint);
       return jsonError("선택할 수 없는 항목입니다.", 400, "invalid_candidate");
     }
 
-    const { data: result, error } = await supabase.rpc("cast_registered_vote", {
-      p_election_id: electionId,
-      p_user_id: userInfo.user.id,
-      p_user_email: getUserEmail(userInfo.user),
-      p_selected_candidate: selectedCandidate,
-      p_receipt_hash: receiptHash,
-    });
+    const { data: result, error } =
+      election.auth_mode === "member_session"
+        ? await supabase.rpc("cast_member_vote", {
+            p_election_id: electionId,
+            p_user_id: userInfo.user.id,
+            p_selected_candidate: selectedCandidate,
+            p_receipt_hash: receiptHash,
+          })
+        : await supabase.rpc("cast_registered_vote", {
+            p_election_id: electionId,
+            p_user_id: userInfo.user.id,
+            p_user_email: getUserEmail(userInfo.user),
+            p_selected_candidate: selectedCandidate,
+            p_receipt_hash: receiptHash,
+          });
 
     if (error) {
       await recordFailedAttempt(ipAddress, endpoint);
