@@ -7,6 +7,11 @@ import type { Candidate } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+// [과금 모델] nozolink 연동 선거 생성 API (X-Api-Key 인증).
+// 유권자 수 × 단가를 연동 "조합 지갑"(union_point_wallets)에서 선불 차감한다
+// (create_election_with_billing / charge_union_points). 관리자가 웹앱에서 직접
+// 만드는 독립형 선거는 별도 경로(POST /api/elections, 소유자 포인트 과금)를 쓴다.
+
 type AuthMode = "member_session" | "sms_token";
 
 function cleanCandidates(candidates: unknown): Candidate[] {
