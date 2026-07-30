@@ -31,9 +31,10 @@ enabled = false
 port = 54327
 vector_port = 54328
 
-[functions]
-[functions.cast_vote]
-verify_jwt = false
-
-[functions.generate_voter_codes]
-verify_jwt = false
+# 엣지 함수 없음.
+# cast_vote / generate_voter_codes 는 20260730000100 에서 제거했다. 근거:
+#   - 이 프로젝트에 배포되어 있지 않았고(라이브는 Cowork 의 cw-* 뿐),
+#   - 호출 대상 RPC(cast_anonymous_vote / generate_voter_codes_batch)가
+#     voter_registry 기반 기표 경로로 대체된 레거시였으며,
+#   - verify_jwt = false 로 선언돼 있어 배포되는 순간 인증 없이 호출 가능했다.
+# 현행 기표·발급 경로는 Next.js API 라우트(서비스롤)다.

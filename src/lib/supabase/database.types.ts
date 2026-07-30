@@ -2642,15 +2642,6 @@ export type Database = {
         }
         Returns: Json
       }
-      cast_anonymous_vote: {
-        Args: {
-          p_code: string
-          p_election_id: string
-          p_phone_suffix: string
-          p_selected_candidate: string
-        }
-        Returns: Json
-      }
       cast_link_vote: {
         Args: {
           p_election_id: string
@@ -2696,18 +2687,6 @@ export type Database = {
       find_user_id_by_email: {
         Args: { p_email: string }
         Returns: string
-      }
-      generate_voter_codes_batch: {
-        Args: {
-          p_count: number
-          p_election_id: string
-          p_phone_suffixes?: string[]
-        }
-        Returns: {
-          code: string
-          id: string
-          phone_suffix: string
-        }[]
       }
       get_election_stats: { Args: { p_election_id: string }; Returns: Json }
       get_public_ballot_ledger: {
