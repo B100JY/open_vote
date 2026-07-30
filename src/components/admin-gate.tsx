@@ -108,7 +108,11 @@ export function AdminGate({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     const supabase = getBrowserSupabase();
-    await supabase?.auth.signOut();
+    // scope: "local" 필수. signOut() 의 기본값은 "global" 이고, 이 Supabase
+    // 프로젝트의 auth.users 는 노조링크·Cowork 와 공유하므로 기본값으로 부르면
+    // 이 버튼 하나가 그 사용자의 다른 앱 세션까지 전 기기에서 끊는다.
+    // 여기는 "다른 계정으로 로그인"(계정 전환)이므로 이 기기만 해제하면 된다.
+    await supabase?.auth.signOut({ scope: "local" });
     setPassword("");
     setState("anonymous");
   }

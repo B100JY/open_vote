@@ -124,7 +124,10 @@ export function AuthClient({ electionId }: { electionId: string }) {
 
   async function signOut() {
     const supabase = getBrowserSupabase();
-    await supabase?.auth.signOut();
+    // scope: "local" 필수. 기본값 "global" 은 공유 auth.users 를 쓰는
+    // 노조링크·Cowork 세션까지 전 기기에서 끊는다. 여기는 "다른 이메일로 로그인"
+    // (계정 전환)이므로 이 기기만 해제한다. 자세한 배경은 AGENTS.md 참조.
+    await supabase?.auth.signOut({ scope: "local" });
     setSessionToken("");
     setStatus(null);
   }
