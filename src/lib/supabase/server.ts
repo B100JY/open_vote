@@ -3,19 +3,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 
 let serviceClient: SupabaseClient<Database, "app_open_vote"> | null = null;
-let anonClient: SupabaseClient<Database, "app_open_vote"> | null = null;
 let serviceDbClient: SupabaseClient | null = null;
 
 function getSupabaseUrl() {
   return process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-}
-
-function getSupabaseAnonKey() {
-  return (
-    process.env.SUPABASE_ANON_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  );
 }
 
 function getSupabaseServiceKey() {
@@ -77,24 +68,6 @@ export function getServiceDbSupabase(): SupabaseClient {
   return serviceDbClient;
 }
 
-export function getAnonSupabase(): SupabaseClient<Database, "app_open_vote"> {
-  if (anonClient) {
-    return anonClient;
-  }
-
-  const url = getSupabaseUrl();
-  const key = getSupabaseAnonKey();
-
-  if (!url || !key) {
-    throw new Error(
-      "SUPABASE_URL and SUPABASE_ANON_KEY are required for public reads.",
-    );
-  }
-
-  anonClient = createClient<Database, "app_open_vote">(url, key, {
-    db: { schema: "app_open_vote" },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-
-  return anonClient;
-}
+// getAnonSupabase() 는 제거했다. 호출자가 하나도 없었고, app_open_vote 에서
+// anon 롤의 권한은 ballots SELECT 하나뿐이므로(20260730000000) 서버에서 공개키
+// 클라이언트를 만들 이유가 없다. 공개 조회도 서비스롤 + 라우트 단 검증으로 한다.

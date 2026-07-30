@@ -1,6 +1,7 @@
 # Open Vote
 
-노동조합용 오픈소스 투표 시스템입니다. 기존 Flutter Web 앱을 Next.js App Router 기반 웹 앱으로 포팅했습니다.
+노동조합용 오픈소스 투표 시스템입니다. Next.js App Router 기반 웹 앱입니다.
+(초기 구현은 Flutter Web 이었고 Next.js 로 포팅했습니다. 2026-07-30 에 남아 있던 Flutter 소스·빌드 스크립트를 제거했습니다.)
 
 ## 주요 흐름
 

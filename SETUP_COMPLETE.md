@@ -33,15 +33,11 @@
 
 ### 1. 앱 실행
 
-```powershell
-.\run-app.ps1
+```bash
+npm run dev
 ```
 
-또는:
-
-```powershell
-flutter run -d chrome
-```
+`http://localhost:3100` 에서 열립니다.
 
 ### 2. 관리자 - 투표 생성
 

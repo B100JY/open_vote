@@ -4,8 +4,8 @@ Open Vote 애플리케이션을 실행하기 위한 단계별 안내서입니다
 
 ## 사전 요구 사항
 
-- [Flutter SDK](https://flutter.dev) (버전 3.10 이상)
-- [Node.js](https://nodejs.org) (Supabase CLI를 설치하기 위해 필요)
+- [Node.js](https://nodejs.org) 20 이상
+- (선택) Supabase CLI — 스키마를 로컬에서 다룰 때만 필요
 
 ## 1. Supabase 프로젝트 설정
 
@@ -21,14 +21,14 @@ Open Vote 애플리케이션을 실행하기 위한 단계별 안내서입니다
 2. `supabase/migrations/003_complete_schema.sql` 파일의 내용을 복사하여 쿼리 창에 붙여넣습니다.
 3. RUN 버튼을 클릭하여 스키마를 적용합니다.
 
-## 3. Edge Functions 배포
+## 3. Edge Functions
 
-1. Supabase CLI를 설치합니다: `npm install -g supabase`
-2. 로그인: `supabase login`
-3. 프로젝트 연결: `supabase link --project-ref YOUR_PROJECT_REFERENCE`
-4. 함수 배포:
-   - `supabase functions deploy cast_vote`
-   - `supabase functions deploy generate_voter_codes`
+배포할 엣지 함수가 없습니다. 기표·발급·과금은 모두 Next.js API 라우트가
+서비스롤로 처리합니다(`src/app/api/**`).
+
+레거시였던 `cast_vote` / `generate_voter_codes` 엣지 함수는 2026-07-30 에
+제거했습니다. 배포된 적이 없었고, 호출 대상 RPC 도 `voter_registry` 기반
+기표 경로로 대체된 상태였습니다.
 
 ## 4. 환경 변수 설정
 
@@ -43,37 +43,38 @@ Open Vote 애플리케이션을 실행하기 위한 단계별 안내서입니다
 
 ### 개발 모드로 실행
 
-Windows PowerShell에서 다음 명령어를 실행합니다:
-
-```powershell
-.\run-app.ps1
+```bash
+npm install
 ```
-
-또는 수동으로 다음과 같이 실행할 수 있습니다:
 
 ```bash
-flutter run -d chrome \
-  --dart-define=SUPABASE_URL=your_supabase_url \
-  --dart-define=SUPABASE_ANON_KEY=your_supabase_anon_key
+npm run dev
 ```
 
-### 웹 애플리케이션 빌드
+`http://localhost:3100` 에서 열립니다(포트는 `package.json` 의 `dev` 스크립트에 고정).
 
-Windows PowerShell에서 다음 명령어를 실행합니다:
+### 빌드 · 테스트 · 린트
 
-```powershell
-.\build-web.ps1
+```bash
+npm run build
 ```
 
-빌드된 파일은 `build/web/` 폴더에 생성됩니다.
+```bash
+npm test
+```
+
+```bash
+npm run lint
+```
 
 ## 스크립트 파일
 
-이 프로젝트에는 여러 유용한 스크립트가 포함되어 있습니다:
-
-- `run-app.ps1`: 애플리케이션을 개발 모드로 실행
-- `build-web.ps1`: 웹 애플리케이션을 빌드
 - `setup-supabase.ps1`: Supabase 설정을 자동화
+- `setup-db.ps1`: 스키마 적용 보조
+- `configure-server.ps1`: 서버 환경 구성
+- `verify-setup.ps1`: 설정 점검
+
+Flutter 전용이던 `run-app.ps1` · `build-web.ps1` 은 2026-07-30 에 제거했습니다.
 
 ## 문제 해결
 
