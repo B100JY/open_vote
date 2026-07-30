@@ -10,7 +10,9 @@
 > - 현행 DB에 안전하게 실행 가능한 스크립트는 다음 두 개뿐이며 모두 멱등입니다(이미 충족 시 no-op).
 >   1. [20260622000000_app_open_vote_status_constraint.sql](migrations/20260622000000_app_open_vote_status_constraint.sql) — `app_open_vote.elections.status`의 `paused` 허용 보장
 >   2. [20260705000001_app_open_vote_sms_billing.sql](migrations/20260705000001_app_open_vote_sms_billing.sql) — **SMS 투표 링크 + 포인트 과금 모델**: `voter_registry`에 `phone`/`voter_name`/`access_token_hash` 추가(이메일 또는 전화 필수로 완화), `credit_accounts`/`credit_transactions`/`api_clients` 테이블, `create_billed_election`/`cast_link_vote`/`adjust_credits`/`rotate_voter_tokens`/`find_user_id_by_email` RPC
-> - 아래 7장 이하의 Flutter / `voter_codes`(6자리 코드 + 전화번호 뒷자리) 안내는 **레거시**입니다. 현행 웹앱은 **문자(SMS) 투표 링크 토큰 + `voter_registry`** 모델(이메일 매직 링크 병행)을 사용합니다.
+> - 아래 3장(Edge Functions 배포) · 5장(Flutter 앱 설정) 및 `voter_codes`(6자리 코드 + 전화번호 뒷자리) 안내는 **레거시**입니다. 현행 웹앱은 **문자(SMS) 투표 링크 토큰 + `voter_registry`** 모델(이메일 매직 링크 병행)을 사용합니다.
+> - **2026-07-30 제거분**: Flutter 소스(`lib/`)·`pubspec.*`·`run-app.ps1`·`build-web.ps1`, 엣지 함수 `cast_vote`/`generate_voter_codes`(배포된 적 없음), RPC `cast_anonymous_vote`/`generate_voter_codes_batch`. 배포할 엣지 함수는 이제 없고, 기표·발급·과금은 Next.js API 라우트가 서비스롤로 처리합니다.
+> - 🔒 **권한 기준선(2026-07-30)**: `app_open_vote` 에서 `anon`·`authenticated` 가 갖는 권한은 **`ballots` 의 SELECT 하나뿐**입니다. 새 테이블·함수를 추가할 때 클라이언트 롤에 그랜트를 주지 마시고, **새 함수마다** `REVOKE EXECUTE ON FUNCTION ... FROM public, anon, authenticated;` 와 `SET search_path` 를 넣으십시오(함수의 PUBLIC EXECUTE 는 `ALTER DEFAULT PRIVILEGES` 로 막히지 않습니다). 확인: `select app_open_vote.assert_permission_baseline();`
 > - **권한 롤**: 투표 생성 API는 로그인 사용자의 **`app_metadata.role`** 클레임으로만 인가됩니다.
 >   `admin`은 모든 선거 관리 + 포인트 지급 + API 키 발급, `creator`는 자신이 만든 선거만 관리합니다. 부여 예시:
 >   ```sql
@@ -32,9 +34,9 @@
 
 1. [Supabase 프로젝트 설정](#1-supabase-프로젝트-설정)
 2. [데이터베이스 스키마 마이그레이션](#2-데이터베이스-스키마-마이그레이션)
-3. [Edge Functions 배포](#3-edge-functions-배포)
+3. [Edge Functions 배포](#3-edge-functions-배포) — 레거시(배포 대상 없음)
 4. [환경 변수 설정](#4-환경-변수-설정)
-5. [Flutter 앱 설정](#5-flutter-앱-설정)
+5. [웹앱 실행](#5-웹앱-실행)
 6. [테스트 및 검증](#6-테스트-및-검증)
 
 ---
@@ -103,35 +105,15 @@ ORDER BY routine_name;
 
 ## 3. Edge Functions 배포
 
-### 3.1 Supabase CLI 설치
+⚠️ **레거시 — 배포할 엣지 함수가 없습니다.**
 
-```bash
-# npm 사용 시
-npm install -g supabase
+`cast_vote` · `generate_voter_codes` 는 이 프로젝트에 배포된 적이 없고
+2026-07-30 에 소스까지 제거했습니다. 호출 대상이던
+`cast_anonymous_vote` · `generate_voter_codes_batch` RPC 도 함께 삭제했습니다
+(`voter_registry` 기반 기표 경로로 대체됨).
 
-# 또는 yarn 사용 시
-yarn global add supabase
-```
-
-### 3.2 로그인 및 링크
-
-```bash
-# Supabase 로그인
-supabase login
-
-# 프로젝트 링크 (프로젝트 ID 는 URL 에서 확인: https://app.supabase.com/project/{PROJECT_ID})
-supabase link --project-ref YOUR_PROJECT_REF
-```
-
-### 3.3 Edge Functions 배포
-
-```bash
-# cast_vote 함수 배포
-supabase functions deploy cast_vote
-
-# generate_voter_codes 함수 배포
-supabase functions deploy generate_voter_codes
-```
+현행 기표·발급·과금은 모두 Next.js API 라우트(`src/app/api/**`)가
+서비스롤로 처리합니다. Supabase CLI 는 스키마 작업이 필요할 때만 쓰십시오.
 
 ### 3.4 Edge Functions 환경 변수 설정
 
@@ -157,21 +139,23 @@ curl -X POST http://localhost:54321/functions/v1/cast_vote \
 
 ## 4. 환경 변수 설정
 
-### 4.1 Flutter 앱 환경 변수
+### 4.1 웹앱 환경 변수
 
-Flutter 앱은 컴파일 시점 환경 변수를 사용합니다:
+`.env.local`(로컬) 또는 호스팅 프로젝트 설정(프로덕션)에서 런타임에 읽습니다.
+전체 목록과 설명은 `.env.example` 에 있습니다.
 
 ```bash
-# 개발 환경
-flutter run \
-  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY
-
-# 프로덕션 빌드 (Web)
-flutter build web \
-  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_KEY
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 ```
+
+⚠️ `NEXT_PUBLIC_*` 은 브라우저 번들에 포함됩니다. 서버 전용 키
+(`SUPABASE_SERVICE_ROLE_KEY`, `OPENVOTE_API_KEY`, `SIMPLY_NOTIFIER_*`)에는
+이 접두사를 붙이지 마십시오.
+
+공개키가 노출돼도 안전한 이유는 위 권한 기준선입니다 — `anon` 은
+`app_open_vote` 에서 `ballots` SELECT 외에 아무 권한이 없습니다.
 
 ### 4.2 .env 파일 생성 (선택사항)
 
@@ -188,45 +172,46 @@ SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 
 ---
 
-## 5. Flutter 앱 설정
+## 5. 웹앱 실행
 
 ### 5.1 의존성 설치
 
 ```bash
-cd F:/src/codeb/bluerdot/open_vote
-flutter pub get
+npm install
 ```
 
 ### 5.2 개발 서버 실행
 
 ```bash
-# Web 으로 실행
-flutter run -d chrome
-
-# 또는 환경 변수와 함께 실행
-flutter run -d chrome \
-  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY
+npm run dev
 ```
+
+`http://localhost:3100` 에서 열립니다. 환경 변수는 `.env.local` 에서 읽으며
+(`--dart-define` 같은 컴파일 시점 주입이 아닙니다) 목록은 `.env.example` 에 있습니다.
 
 ### 5.3 프로덕션 빌드
 
 ```bash
-# Web 프로덕션 빌드
-flutter build web --release \
-  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY
-
-# 빌드 결과물은 build/web/ 디렉토리에 생성됨
+npm run build
 ```
+
+배포는 [DEPLOYMENT.md](../DEPLOYMENT.md) 를 참고하세요. 서버 라우트가 서비스롤을
+쓰므로 정적 SPA 호스팅은 쓸 수 없고 Node 런타임이 필요합니다.
+
+> Flutter 앱(`lib/`, `pubspec.yaml`)은 2026-07-30 에 제거했습니다.
 
 ---
 
 ## 6. 테스트 및 검증
 
-### 6.1 투표 생성 테스트 (관리자)
+⚠️ **6.1~6.2 는 레거시 절차입니다** — 삭제된 Flutter 앱과 `voter_codes`(6자리 코드 +
+전화번호 뒷자리) 모델을 전제합니다. 현행 웹앱의 흐름은 문자 링크 토큰 +
+`voter_registry` 이며 [README.md](../README.md) 의 "주요 흐름"을 참고하세요.
+6.3(익명성 검증)은 현행에도 유효합니다.
 
-1. Flutter 앱 실행
+### 6.1 투표 생성 테스트 (관리자, 레거시)
+
+1. 웹앱 실행(`npm run dev`)
 2. "관리자" 버튼 클릭
 3. 투표 정보 입력:
    - 투표명: "테스트 선거"
@@ -235,9 +220,9 @@ flutter build web --release \
 4. "투표 생성 및 인증코드 발급" 클릭
 5. 생성된 인증코드 CSV 다운로드
 
-### 6.2 투표 테스트 (유권자)
+### 6.2 투표 테스트 (유권자, 레거시)
 
-1. Flutter 앱 홈으로 이동
+1. 웹앱 홈으로 이동
 2. "투표하기" 클릭
 3. 테스트 선거 선택
 4. 다운로드한 CSV 에서 인증코드와 전화번호 뒷자리 입력
@@ -344,7 +329,8 @@ ALTER TABLE ballots DISABLE ROW LEVEL SECURITY;
 - [Supabase 문서](https://supabase.com/docs)
 - [Edge Functions 문서](https://supabase.com/docs/guides/functions)
 - [RLS 문서](https://supabase.com/docs/guides/auth/row-level-security)
-- [Flutter Web 배포](https://docs.flutter.dev/deployment/web)
+- [Next.js 배포](https://nextjs.org/docs/app/building-your-application/deploying)
+- [Postgres 권한/기본권한](https://www.postgresql.org/docs/current/sql-alterdefaultprivileges.html)
 
 ---
 

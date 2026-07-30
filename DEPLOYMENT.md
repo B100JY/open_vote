@@ -6,7 +6,7 @@
 
 1. [배포 전 확인사항](#1-배포-전-확인사항)
 2. [Supabase 프로덕션 설정](#2-supabase-프로덕션-설정)
-3. [Flutter Web 빌드](#3-flutter-web-빌드)
+3. [Next.js 빌드](#3-nextjs-빌드)
 4. [웹 호스팅 배포](#4-웹-호스팅-배포)
 5. [모니터링 및 유지보수](#5-모니터링-및-유지보수)
 
@@ -17,25 +17,30 @@
 ### 체크리스트
 
 - [ ] Supabase 스키마가 프로덕션에 적용됨
-- [ ] Edge Functions 이 배포됨
 - [ ] 환경 변수가 안전하게 관리됨
 - [ ] RLS 정책이 테스트됨
+- [ ] **`select app_open_vote.assert_permission_baseline();` 가 통과함**
+      (anon/authenticated 의 권한이 `ballots` SELECT 하나뿐인지 확인 — 위반 시 예외)
 - [ ] Rate Limiting 이 작동함
 - [ ] CSV 다운로드가 작동함
 - [ ] 실시간 투표율이 업데이트됨
 - [ ] 모든 기능이 테스트됨
 
+> 배포할 엣지 함수는 없습니다. 기표·발급·과금은 Next.js API 라우트가
+> 서비스롤로 처리합니다.
+
 ### 테스트 항목
 
 ```bash
-# 1. 단위 테스트 실행
-flutter test
+npm test
+```
 
-# 2. 코드 분석
-flutter analyze
+```bash
+npm run lint
+```
 
-# 3. 웹 빌드 테스트
-flutter build web --release
+```bash
+npm run build
 ```
 
 ---
@@ -87,34 +92,31 @@ AND tablename IN ('elections', 'voter_codes', 'ballots', 'rate_limits', 'audit_l
 
 ---
 
-## 3. Flutter Web 빌드
+## 3. Next.js 빌드
 
 ### 3.1 환경 변수 설정
 
+Vercel 프로젝트 설정(또는 로컬 `.env.local`)에 등록합니다. `NEXT_PUBLIC_*` 은
+브라우저 번들에 포함되므로 공개 정보만 담습니다.
+
 ```bash
-# .env.production 파일 생성 (Git 에 커밋하지 않음)
-SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-SUPABASE_ANON_KEY=YOUR_ANON_KEY
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_PUBLISHABLE_KEY
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
 ```
+
+서버 전용 키(`SUPABASE_SERVICE_ROLE_KEY`, `OPENVOTE_API_KEY`,
+`SIMPLY_NOTIFIER_*`)에는 `NEXT_PUBLIC_` 접두사를 붙이지 마십시오.
+전체 목록은 `.env.example` 을 참고하세요.
 
 ### 3.2 프로덕션 빌드
 
 ```bash
-# Release 빌드
-flutter build web --release \
-  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY
-
-# 빌드 결과물: build/web/
+npm ci
 ```
 
-### 3.3 빌드 최적화
-
 ```bash
-# Wasm 컴파일러 사용 (권장 - 더 빠른 성능)
-flutter build web --release --wasm \
-  --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY
+npm run build
 ```
 
 ---
@@ -124,11 +126,10 @@ flutter build web --release --wasm \
 ### 옵션 1: Vercel (권장)
 
 ```bash
-# Vercel CLI 설치
 npm install -g vercel
+```
 
-# 배포
-cd build/web
+```bash
 vercel --prod
 ```
 
@@ -141,79 +142,47 @@ vercel --prod
 }
 ```
 
-### 옵션 2: Netlify
+### 옵션 2: 자체 Node 호스트
+
+`next start` 를 프로세스 관리자(systemd, pm2 등)로 띄우고 Nginx 를 리버스
+프록시로 둡니다. 서버 전용 환경 변수는 프로세스 환경에 주입합니다.
 
 ```bash
-# Netlify CLI 설치
-npm install -g netlify-cli
-
-# 배포
-cd build/web
-netlify deploy --prod
+npm ci && npm run build
 ```
-
-**netlify.toml 설정:**
-```toml
-[build]
-  publish = "build/web"
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-```
-
-### 옵션 3: Firebase Hosting
 
 ```bash
-# Firebase CLI 설치
-npm install -g firebase-tools
-
-# 로그인 및 초기화
-firebase login
-firebase init hosting
-
-# 배포
-firebase deploy --only hosting
+npm run start
 ```
-
-**firebase.json 설정:**
-```json
-{
-  "hosting": {
-    "public": "build/web",
-    "rewrites": [
-      { "source": "**", "destination": "/index.html" }
-    ]
-  }
-}
-```
-
-### 옵션 4: Nginx 서버
 
 ```nginx
 server {
     listen 80;
     server_name your-domain.com;
-    root /var/www/open_vote;
-    index index.html;
 
-    # Flutter Web SPA 라우팅
     location / {
-        try_files $uri $uri/ /index.html;
+        proxy_pass http://127.0.0.1:3100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
     }
-
-    # 정적 파일 캐싱
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # Gzip 압축
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;
 }
 ```
+
+`X-Forwarded-For` 를 넘기지 않으면 Rate Limiting 이 모든 요청을 프록시 IP
+하나로 집계합니다(`getClientIp`).
+
+> **정적 SPA 호스팅(Firebase Hosting 의 정적 모드, Netlify 정적 배포 등)은
+> 쓸 수 없습니다.** 기표·발급·과금이 서버 라우트(`src/app/api/**`)에서
+> 서비스롤로 실행되므로 Node 런타임이 필요합니다. 이 키를 브라우저로
+> 내보내면 안 됩니다.
+>
+> 과거 이 문서에 있던 `build/web` 정적 배포 절차는 Flutter Web 시절의
+> 것으로, 2026-07-30 에 제거했습니다.
 
 ---
 
@@ -223,13 +192,16 @@ server {
 
 1. **Dashboard** → **Logs** 에서 실시간 로그 확인
 2. **Database** → **Tables** 에서 데이터 확인
-3. **Edge Functions** → **Logs** 에서 함수 실행 로그 확인
+3. **Advisors** → **Security** 에서 권한/RLS 경고 확인
+   (`app_open_vote` 항목이 늘어나면 락다운이 흔들린 신호입니다)
 
 ### 5.2 주요 메트릭
 
 - **투표 진행률**: `get_election_stats()` 함수로 실시간 확인
-- **인증코드 사용률**: `voter_codes.is_used` 비율
-- **에러율**: Edge Function 로그에서 4xx/5xx 응답 모니터링
+- **참여율**: `voter_registry.has_voted` 비율
+  (레거시 선거는 `voter_codes.is_used`)
+- **권한 기준선**: `select app_open_vote.assert_permission_baseline();`
+- **에러율**: 호스팅 로그(Vercel Functions 등)에서 4xx/5xx 응답 모니터링
 
 ### 5.3 백업 전략
 

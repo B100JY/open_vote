@@ -1,5 +1,13 @@
 # Open Vote - 설정 요약
 
+> ⚠️ **이 문서는 2026-05 초기 설정 시점의 기록입니다. 현행 안내가 아닙니다.**
+> - Flutter Web 앱과 `run-app.ps1` · `build-web.ps1` 은 2026-07-30 에 제거했습니다.
+>   현행 실행은 `npm run dev` 입니다([RUNNING.md](RUNNING.md) 참조).
+> - 배포할 엣지 함수가 없습니다. `cast_vote` · `generate_voter_codes` 는 배포된 적이
+>   없는 레거시였고 2026-07-30 에 제거했습니다.
+> - 아래 적힌 Supabase 프로젝트(`zxrwlwhbcivwpvmktuoj`)는 **현행 프로젝트가
+>   아닙니다.** 현행은 `vvpmrzwjhzsjtieoweky` 이며 `app_open_vote` 스키마를 씁니다.
+
 ## 완료된 작업
 
 ✅ **프로젝트 구조 분석**
