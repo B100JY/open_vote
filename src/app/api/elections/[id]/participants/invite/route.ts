@@ -50,14 +50,23 @@ export async function POST(
     let failed = 0;
     const pendingVoters = (voters ?? []).filter((voter) => voter.email);
 
+    // inviteUserByEmail 은 OpenVote 가 공유 auth.users 에 계정을 **새로 만드는**
+    // 유일한 지점이다. 그 계정은 voter_registry(ON DELETE SET NULL)에만 흔적을
+    // 남기므로, 과금 FK 5개에 건 RESTRICT(20260731000000)로 보호되지 않는다.
+    // 지금은 초대로 만든 계정이 0건이고 피해도 복구 가능하므로(계정이 지워져도
+    // 명부 행은 생존, 재초대로 복구) 구조를 만들지 않고 근거만 남긴다.
+    // 나중에 보호가 필요해지면 이 기록이 백필 근거가 된다.
+    // 자세한 배경: docs/shared-auth-openvote.md
+    const invitedUserIds: string[] = [];
+
     for (let index = 0; index < pendingVoters.length; index += 5) {
       const batch = pendingVoters.slice(index, index + 5);
       const results = await Promise.allSettled(
         batch.map(async (voter) => {
-          const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
-            voter.email as string,
-            { redirectTo },
-          );
+          const { data: invited, error: inviteError } =
+            await supabase.auth.admin.inviteUserByEmail(voter.email as string, {
+              redirectTo,
+            });
           if (inviteError) {
             throw inviteError;
           }
@@ -65,11 +74,18 @@ export async function POST(
             .from("voter_registry")
             .update({ invited_at: new Date().toISOString() })
             .eq("id", voter.id);
+          return invited?.user?.id ?? null;
         }),
       );
 
       sent += results.filter((result) => result.status === "fulfilled").length;
       failed += results.filter((result) => result.status === "rejected").length;
+
+      for (const result of results) {
+        if (result.status === "fulfilled" && result.value) {
+          invitedUserIds.push(result.value);
+        }
+      }
     }
 
     await supabase.from("audit_logs").insert({
@@ -80,6 +96,8 @@ export async function POST(
         failed,
         actor: auth.user.user.id,
         sent_at: new Date().toISOString(),
+        // 공유 auth.users 에 OpenVote 가 만든 계정. 위 주석 참조.
+        invited_user_ids: invitedUserIds,
       },
     });
 
