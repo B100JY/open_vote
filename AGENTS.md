@@ -24,7 +24,7 @@ SDK 로 부르든 admin REST 로 직접 부르든 동일합니다. `src/lib/__te
 |---|---|
 | `signOut()` (인자 없음 = `scope:'global'`) | 그 사용자의 **다른 앱 세션이 전 기기에서** 끊김. 계정 전환이면 `signOut({ scope: 'local' })` |
 | `auth.admin.deleteUser` | FK 를 타고 세 앱 데이터가 함께 삭제됨 |
-| `auth.admin.unlinkIdentity` | 다른 앱의 **유일한** 로그인 수단일 수 있음. GoTrue 의 "신원 2개 이상" 규칙은 보호가 안 됨 |
+| `auth.admin.unlinkIdentity` | 다른 앱의 로그인 수단일 수 있음. GoTrue 의 "신원 2개 이상" 규칙은 그 신원이 **다른 앱에서** 어떤 의미인지 모름 |
 | `updateUserById({ email \| password })` | 공유 계정의 로그인 수단을 바꿈 |
 | `DELETE /auth/v1/admin/users/...` | 위와 같은 행위의 REST 형태. 이름 검사를 우회함 |
 
