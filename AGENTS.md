@@ -52,3 +52,10 @@ OpenVote 에는 현재 이 경로가 하나도 없습니다(로그아웃 2곳은
 
 전역(`IN SCHEMA` 없는) `ALTER DEFAULT PRIVILEGES` 는 세 앱 공유 자원이라 **3자 합의**가
 필요합니다. 스키마 단위는 각 앱 자유입니다.
+
+## 더 읽을 것
+
+[docs/shared-auth-openvote.md](docs/shared-auth-openvote.md) — OpenVote 의 클레임 정의
+(RESTRICT FK 5개), 계정 삭제 시 해제 순서, `core` 스키마 표면 실측, 3자 계약 문서에
+제출할 항목. 코드로 막을 수 없는 것들(대시보드 신원 해제·설정 변경)이 왜 문서로만
+통제되는지도 여기 있습니다.
