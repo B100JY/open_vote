@@ -38,8 +38,11 @@ OpenVote 에는 현재 이 경로가 하나도 없습니다(로그아웃 2곳은
 
 ## `app_open_vote` 권한 기준선
 
-**`anon` · `authenticated` 가 이 스키마에서 갖는 권한은 `ballots` 의 SELECT 하나뿐입니다**
-(`/dashboard` · `/results` 의 Realtime 원장 구독용). 표·함수·시퀀스의 나머지 권한은 0입니다.
+**`anon` · `authenticated` 가 이 스키마에서 갖는 권한은 0입니다**(2026-10-10 부터).
+예전에는 `/dashboard` · `/results` 의 Realtime 구독용으로 `ballots` SELECT 를 열어 두었는데,
+누구나 기표를 실시간으로 받아볼 수 있어 비밀투표가 깨졌습니다. 화면은 서버 API 를 주기적으로
+조회합니다. `ballots` · `voter_registry` 를 `supabase_realtime` 발행에 다시 넣지 마십시오
+(기준선 점검이 잡습니다).
 
 새 객체를 추가할 때:
 
@@ -52,6 +55,18 @@ OpenVote 에는 현재 이 경로가 하나도 없습니다(로그아웃 2곳은
 
 전역(`IN SCHEMA` 없는) `ALTER DEFAULT PRIVILEGES` 는 세 앱 공유 자원이라 **3자 합의**가
 필요합니다. 스키마 단위는 각 앱 자유입니다.
+
+## 비밀투표 — 명부와 투표지를 잇는 값을 만들지 마십시오
+
+`voter_registry`(누가 투표했나)와 `ballots`(무엇을 찍었나)는 **시각·순서로도** 이어지면 안 됩니다.
+2026-10 이전에는 명부의 `voted_at` 과 원장의 `sequence_number` 가 같은 순서라 관리자가 CSV 만으로
+누가 누구를 찍었는지 알 수 있었습니다(`20261010000000` 에서 둘 다 삭제).
+
+- 기표 때 `voter_registry` 의 시각 칼럼(`updated_at` 포함)을 건드리지 않습니다. 바꾸는 값은 `has_voted` 뿐입니다.
+- `ballots` 에 시각·순번·명부 id 를 넣지 않습니다.
+- 결과(`get_election_results`)와 공개 원장(`get_public_ballot_ledger`)은 `status = 'closed'` 일 때만 돌려줍니다.
+  원장은 영수증 해시순으로 정렬합니다.
+- `closed` 는 되돌릴 수 없습니다(트리거 `guard_election_status`).
 
 ## 더 읽을 것
 

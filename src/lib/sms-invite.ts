@@ -19,6 +19,10 @@ export type SmsInviteSummary = {
   dryRun: boolean;
   batchId: string | null;
   results: NotifierRecipientResult[];
+  /** 중간에 멈췄으면 그 이유(앞 묶음은 이미 발송됨) */
+  stopped: string | null;
+  stoppedStatus?: number;
+  stoppedCode?: string;
 };
 
 export type SmsInviteResult =
@@ -56,6 +60,9 @@ export function getVoteLinkBaseUrl(request?: Request): string {
  * - 멱등키를 일부러 쓰지 않습니다: 토큰이 매 요청 회전되므로 notifier가 이전
  *   응답을 재생하면 이미 무효화된 링크가 "발송됨"으로 보이게 됩니다. 대신
  *   자동 재시도를 하지 않고 결과를 그대로 반환합니다.
+ * - 수신자를 getNotifierChunkSize() 명씩 나눠 보냅니다. 묶음마다 토큰을 회전하고,
+ *   문자가 나가지 않은 수신자(발송 실패·건너뜀·요청 오류)는 이전 토큰으로 되돌립니다.
+ *   한도 초과(429)나 서버 오류가 나면 거기서 멈추고 앞 묶음까지의 결과를 돌려줍니다.
  */
 export async function sendVoteInviteSms({
   electionId,
@@ -154,103 +161,152 @@ export async function sendVoteInviteSms({
         dryRun,
         batchId: null,
         results: [],
+        stopped: null,
       },
     };
   }
 
-  if (!dryRun) {
-    const { error: rotateError } = await supabase.rpc("rotate_voter_tokens", {
-      p_election_id: electionId,
-      p_tokens: targets.map(({ voter, token }) => ({
-        id: voter.id,
-        hash: hashVoterToken(token),
-      })) as unknown as Json,
-    });
+  const chunkSize = getNotifierChunkSize();
+  const summary: SmsInviteSummary = {
+    requested: 0,
+    sent: 0,
+    failed: 0,
+    skipped: 0,
+    dryRun,
+    batchId: null,
+    results: [],
+    stopped: null,
+  };
+  const batchIds: string[] = [];
 
-    if (rotateError) {
-      return {
-        ok: false,
-        status: 500,
-        error: "internal_error",
-        message: `투표 링크 토큰 갱신에 실패했습니다. (${rotateError.message})`,
-      };
+  for (let offset = 0; offset < targets.length; offset += chunkSize) {
+    const chunk = targets.slice(offset, offset + chunkSize);
+    const hashes = new Map(chunk.map(({ voter, token }) => [voter.id, hashVoterToken(token)]));
+    let previous: Array<{ id: string; previous_hash: string | null }> = [];
+
+    if (!dryRun) {
+      const { data: rotated, error: rotateError } = await supabase.rpc("rotate_voter_tokens", {
+        p_election_id: electionId,
+        p_tokens: chunk.map(({ voter }) => ({ id: voter.id, hash: hashes.get(voter.id) })) as unknown as Json,
+      });
+      if (rotateError) {
+        summary.stopped = `투표 링크 토큰 갱신에 실패했습니다. (${rotateError.message})`;
+        break;
+      }
+      previous = (rotated ?? []) as unknown as typeof previous;
+    }
+
+    /** 문자가 가지 않은 수신자는 이전 링크를 되살린다(재발송 실패로 이미 받은 링크가 죽지 않게) */
+    const restore = async (ids: string[]) => {
+      if (dryRun || ids.length === 0) {
+        return;
+      }
+      const wanted = new Set(ids);
+      await supabase.rpc("restore_voter_tokens", {
+        p_election_id: electionId,
+        p_tokens: previous
+          .filter((item) => wanted.has(item.id))
+          .map((item) => ({ id: item.id, hash: hashes.get(item.id), previous_hash: item.previous_hash })) as unknown as Json,
+      });
+    };
+
+    const recipients: NotifierRecipient[] = chunk.map(({ voter, token }) => ({
+      phone: voter.phone as string,
+      ref: voter.id,
+      variables: {
+        name: voter.voter_name?.trim() || "유권자",
+        url: `${baseUrl}/v/${token}`,
+      },
+    }));
+
+    let batch;
+    try {
+      batch = await sendNotifierBatch(config, { recipients, dryRun });
+    } catch (caught) {
+      await restore(chunk.map(({ voter }) => voter.id));
+      if (caught instanceof SimplyNotifierError) {
+        const retryAfter =
+          caught.detail && typeof caught.detail === "object" && "retry_after" in caught.detail
+            ? Number((caught.detail as { retry_after?: unknown }).retry_after)
+            : null;
+        summary.stopped =
+          caught.status === 429
+            ? `발송 한도를 초과했습니다.${retryAfter ? ` ${retryAfter}초 후 다시 시도해주세요.` : ""}`
+            : `SMS 발송에 실패했습니다. (${caught.code})`;
+        summary.stoppedStatus = caught.status === 429 ? 429 : 502;
+        summary.stoppedCode = caught.code;
+      } else {
+        summary.stopped = "SMS 발송 서버에 연결하지 못했습니다.";
+        summary.stoppedStatus = 502;
+        summary.stoppedCode = "notifier_unreachable";
+      }
+      break;
+    }
+
+    summary.requested += batch.requested;
+    summary.sent += batch.sent;
+    summary.failed += batch.failed;
+    summary.skipped += batch.skipped;
+    summary.dryRun = batch.dry_run;
+    summary.results.push(...batch.results);
+    if (batch.batch_id) {
+      batchIds.push(batch.batch_id);
+    }
+
+    if (!dryRun) {
+      const sentIds = new Set(
+        batch.results
+          .filter((result) => result.status === "sent" && result.ref)
+          .map((result) => result.ref as string),
+      );
+      await restore(chunk.map(({ voter }) => voter.id).filter((id) => !sentIds.has(id)));
+
+      if (sentIds.size > 0) {
+        await supabase
+          .from("voter_registry")
+          .update({ invited_at: new Date().toISOString() })
+          .in("id", [...sentIds]);
+      }
     }
   }
 
-  const recipients: NotifierRecipient[] = targets.map(({ voter, token }) => ({
-    phone: voter.phone as string,
-    ref: voter.id,
-    variables: {
-      name: voter.voter_name?.trim() || "유권자",
-      url: `${baseUrl}/v/${token}`,
-    },
-  }));
+  summary.batchId = batchIds[0] ?? null;
 
-  let batch;
-  try {
-    batch = await sendNotifierBatch(config, { recipients, dryRun });
-  } catch (caught) {
-    if (caught instanceof SimplyNotifierError) {
-      const retryAfter =
-        caught.detail && typeof caught.detail === "object" && "retry_after" in caught.detail
-          ? Number((caught.detail as { retry_after?: unknown }).retry_after)
-          : null;
-      return {
-        ok: false,
-        status: caught.status === 429 ? 429 : 502,
-        error: caught.code,
-        message:
-          caught.status === 429
-            ? `발송 한도를 초과했습니다.${retryAfter ? ` ${retryAfter}초 후 다시 시도해주세요.` : ""}`
-            : `SMS 발송에 실패했습니다. (${caught.code})`,
-      };
-    }
+  if (summary.requested === 0 && summary.stopped) {
     return {
       ok: false,
-      status: 502,
-      error: "notifier_unreachable",
-      message: "SMS 발송 서버에 연결하지 못했습니다.",
+      status: summary.stoppedStatus ?? 500,
+      error: summary.stoppedCode ?? "internal_error",
+      message: summary.stopped,
     };
   }
 
   if (!dryRun) {
-    const sentIds = batch.results
-      .filter((result) => result.status === "sent" && result.ref)
-      .map((result) => result.ref as string);
-
-    if (sentIds.length > 0) {
-      await supabase
-        .from("voter_registry")
-        .update({ invited_at: new Date().toISOString() })
-        .in("id", sentIds);
-    }
-
     await supabase.from("audit_logs").insert({
       event_type: "sms_invites_sent",
       election_id: electionId,
       details: {
-        batch_id: batch.batch_id,
-        requested: batch.requested,
-        sent: batch.sent,
-        failed: batch.failed,
-        skipped: batch.skipped,
+        batch_ids: batchIds,
+        requested: summary.requested,
+        sent: summary.sent,
+        failed: summary.failed,
+        skipped: summary.skipped,
         resend_all: resendAll,
+        stopped: summary.stopped,
         actor: actorId,
         sent_at: new Date().toISOString(),
       },
     });
   }
 
-  return {
-    ok: true,
-    summary: {
-      requested: batch.requested,
-      sent: batch.sent,
-      failed: batch.failed,
-      skipped: batch.skipped,
-      dryRun: batch.dry_run,
-      batchId: batch.batch_id ?? null,
-      results: batch.results,
-    },
-  };
+  return { ok: true, summary };
+}
+
+/**
+ * notifier 1회 호출당 수신자 수. 서버 한도(notify_max_recipients, 기본 1000)보다 작게 둔다.
+ * 한 번에 몰아 보내면 1000명을 넘는 명부는 통째로 거절된다.
+ */
+export function getNotifierChunkSize() {
+  const value = Number(process.env.SIMPLY_NOTIFIER_MAX_BATCH ?? 500);
+  return Number.isInteger(value) && value >= 1 ? Math.min(value, 1000) : 500;
 }

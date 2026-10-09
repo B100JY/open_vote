@@ -1,4 +1,4 @@
-import type { Candidate, Election, ElectionStatus } from "@/lib/types";
+import type { BallotType, Candidate, Election, ElectionStatus } from "@/lib/types";
 
 export function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -49,6 +49,10 @@ export function normalizeElection(value: unknown): Election {
     candidates: normalizeCandidates(record.candidates),
     total_voter_codes: Number(record.total_voter_codes ?? 0),
     status: normalizeStatus(record.status),
+    ballot_type: normalizeBallotType(record.ballot_type),
+    min_choices: positiveInt(record.min_choices),
+    max_choices: positiveInt(record.max_choices),
+    allow_blank: record.allow_blank === true,
     starts_at: typeof record.starts_at === "string" ? record.starts_at : null,
     ends_at: typeof record.ends_at === "string" ? record.ends_at : null,
     created_at:
@@ -60,6 +64,15 @@ export function normalizeElection(value: unknown): Election {
         ? record.updated_at
         : new Date().toISOString(),
   };
+}
+
+function normalizeBallotType(value: unknown): BallotType {
+  return value === "multi" || value === "rank" || value === "approve" ? value : "single";
+}
+
+function positiveInt(value: unknown) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 1 ? number : 1;
 }
 
 export function normalizeStatus(value: unknown): ElectionStatus {

@@ -5,6 +5,8 @@ import { getServiceSupabase } from "@/lib/supabase/server";
 import { getVoteLinkBaseUrl, sendVoteInviteSms } from "@/lib/sms-invite";
 
 export const dynamic = "force-dynamic";
+// 수백~수천 명을 묶음으로 나눠 보내므로 기본 실행 시간보다 길게 둔다
+export const maxDuration = 300;
 
 /**
  * 미투표 유권자(전화번호 보유)에게 개인화 투표 링크 SMS 발송.
@@ -55,13 +57,13 @@ export async function POST(
       return jsonError(result.message, result.status, result.error);
     }
 
-    const { requested, sent, failed, skipped, dryRun, batchId } = result.summary;
+    const { requested, sent, failed, skipped, dryRun, batchId, stopped } = result.summary;
     // 상세 results에는 마스킹된 번호만 있지만 응답 크기를 줄이기 위해 실패분만 반환
     const failures = result.summary.results.filter(
       (item) => item.status === "failed" || item.status === "error" || item.status === "skipped",
     );
 
-    return NextResponse.json({ requested, sent, failed, skipped, dryRun, batchId, failures });
+    return NextResponse.json({ requested, sent, failed, skipped, dryRun, batchId, stopped, failures });
   } catch (error) {
     return jsonError(
       error instanceof Error ? error.message : "문자 발송에 실패했습니다.",

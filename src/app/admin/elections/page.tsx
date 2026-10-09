@@ -30,6 +30,7 @@ import {
   statusLabel,
   statusTone,
 } from "@/lib/utils";
+import { ballotTypeLabel } from "@/lib/ballot";
 import { formatPhone } from "@/lib/voters";
 
 type CodesResponse = {
@@ -74,6 +75,12 @@ function ManageElections() {
   }, []);
 
   async function updateStatus(election: Election, status: ElectionStatus) {
+    if (
+      status === "closed" &&
+      !window.confirm("선거를 종료하면 다시 열 수 없고 결과가 공개됩니다. 종료할까요?")
+    ) {
+      return;
+    }
     setUpdatingId(election.id);
     setError("");
     try {
@@ -99,14 +106,13 @@ function ManageElections() {
       );
       const lines = [
         `선거명: ${csvEscape(election.name)}`,
-        "연락처,이름,투표여부,링크발송시각,투표시각",
+        "연락처,이름,투표여부,링크발송시각",
         ...data.voters.map((voter) =>
           [
             csvEscape(voter.phone ? formatPhone(voter.phone) : (voter.email ?? "")),
             csvEscape(voter.voter_name ?? ""),
             csvEscape(voter.has_voted ? "투표완료" : "투표전"),
             csvEscape(voter.invited_at),
-            csvEscape(voter.voted_at),
           ].join(","),
         ),
       ];
@@ -181,6 +187,10 @@ function ManageElections() {
             ? "발송 대상(전화번호가 있는 미투표 유권자)이 없습니다."
             : "새로 발송할 대상이 없습니다. 전원 발송된 상태라면 재발송을 이용해주세요.",
         );
+      } else if (result.stopped) {
+        setError(
+          `문자 ${result.sent}건을 보낸 뒤 멈췄습니다: ${result.stopped} 남은 대상은 "문자 발송"을 다시 누르면 이어서 보냅니다.`,
+        );
       } else if (result.failed > 0 || result.skipped > 0) {
         setError(
           `문자 ${result.sent}건 발송, 실패 ${result.failed}건, 건너뜀 ${result.skipped}건. 실패 대상은 다시 발송을 시도해주세요.`,
@@ -250,8 +260,10 @@ function ManageElections() {
                   </p>
                   <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
                     <span>등록 유권자 {election.total_voter_codes}명</span>
+                    <span>{ballotTypeLabel(election.ballot_type)}</span>
                     <span>항목 {election.candidates.length}개</span>
-                    <span>종료 {formatDate(election.ends_at)}</span>
+                    <span>시작 {formatDate(election.starts_at)}</span>
+                    <span>마감 {formatDate(election.ends_at)}</span>
                   </div>
                 </div>
 

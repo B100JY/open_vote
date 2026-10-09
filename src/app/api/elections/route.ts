@@ -3,6 +3,7 @@ import { jsonError } from "@/lib/api-response";
 import { getRequestUser, requireVoteCreator } from "@/lib/supabase/auth";
 import { isAdminUser, isVoteCreator } from "@/lib/admin-role";
 import { getServiceSupabase } from "@/lib/supabase/server";
+import { cleanBallotRules } from "@/lib/ballot";
 import { cleanCandidatesInput, createBilledElection } from "@/lib/create-election";
 import { cleanVoters, votersFromEmails } from "@/lib/voters";
 import type { ElectionStatus } from "@/lib/types";
@@ -21,6 +22,8 @@ export async function GET(request: Request) {
     const admin = userInfo ? isAdminUser(userInfo.user) : false;
     const creator = userInfo ? isVoteCreator(userInfo.user) : false;
     const supabase = getServiceSupabase();
+    // 마감 시각이 지난 선거를 먼저 닫는다(별도 스케줄러 없이 조회 때 정리)
+    await supabase.rpc("close_expired_elections");
 
     let query = supabase
       .from("elections")
@@ -95,12 +98,27 @@ export async function POST(request: Request) {
       );
     }
 
+    const rules = cleanBallotRules(body, candidates.length);
+    if (!rules.ok) {
+      return jsonError(rules.message, 400, "invalid_ballot_rules");
+    }
+
+    // 기간: 시작 미지정 = 지금, 마감은 필수
+    const startsAt = parseDate(body.startsAt) ?? new Date();
+    const endsAt = parseDate(body.endsAt);
+    if (!endsAt) {
+      return jsonError("투표 마감 일시를 입력해주세요.", 400, "invalid_period");
+    }
+
     const result = await createBilledElection({
       creatorId: auth.user.user.id,
       name,
       description,
       candidates,
       voters,
+      rules: rules.rules,
+      startsAt,
+      endsAt,
     });
 
     if (!result.ok) {
@@ -118,4 +136,12 @@ export async function POST(request: Request) {
       500,
     );
   }
+}
+
+function parseDate(value: unknown) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }

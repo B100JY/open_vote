@@ -3,7 +3,6 @@ import { getClientIp, jsonError } from "@/lib/api-response";
 import { recordFailedAttempt, checkRateLimit } from "@/lib/rate-limit";
 import { getRequestUser, getUserEmail } from "@/lib/supabase/auth";
 import { getServiceDbSupabase } from "@/lib/supabase/server";
-import { normalizeCandidates } from "@/lib/utils";
 import { voteErrorStatus } from "@/lib/vote-status";
 
 export const dynamic = "force-dynamic";
@@ -25,16 +24,13 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Record<string, unknown>;
     const electionId =
       typeof body.electionId === "string" ? body.electionId.trim() : "";
-    const selectedCandidate =
-      typeof body.selectedCandidate === "string"
-        ? body.selectedCandidate.trim()
-        : "";
+    const selection = body.selection;
     const receiptHash =
       typeof body.receiptHash === "string"
         ? body.receiptHash.trim().toLowerCase()
         : "";
 
-    if (!electionId || !selectedCandidate || !/^[a-f0-9]{64}$/.test(receiptHash)) {
+    if (!electionId || !selection || typeof selection !== "object" || !/^[a-f0-9]{64}$/.test(receiptHash)) {
       await recordFailedAttempt(ipAddress, endpoint);
       return jsonError("필수 항목이 누락되었거나 형식이 올바르지 않습니다.", 400);
     }
@@ -48,22 +44,13 @@ export async function POST(request: Request) {
     const supabase = getServiceDbSupabase();
     const { data: election, error: electionError } = await supabase
       .from("elections")
-      .select("id, status, candidates, auth_mode, ends_at")
+      .select("id, auth_mode")
       .eq("id", electionId)
-      .single<{ id: string; status: string; candidates: unknown; auth_mode: string; ends_at: string | null }>();
+      .single<{ id: string; auth_mode: string }>();
 
-    if (electionError || !election || election.status !== "active") {
+    if (electionError || !election) {
       await recordFailedAttempt(ipAddress, endpoint);
-      return jsonError(
-        "이 선거는 현재 진행 중이 아닙니다.",
-        403,
-        "election_not_active",
-      );
-    }
-
-    if (election.ends_at && new Date(election.ends_at).getTime() < Date.now()) {
-      await recordFailedAttempt(ipAddress, endpoint);
-      return jsonError("투표 기간이 마감되었습니다.", 403, "election_ended");
+      return jsonError("선거 정보를 찾을 수 없습니다.", 403, "election_not_found");
     }
 
     // sms_token 방식은 세션이 아니라 1회용 링크(/api/vote/link)로만 투표한다.
@@ -76,25 +63,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const candidates = normalizeCandidates(election.candidates);
-    if (!candidates.some((candidate) => candidate.id === selectedCandidate)) {
-      await recordFailedAttempt(ipAddress, endpoint);
-      return jsonError("선택할 수 없는 항목입니다.", 400, "invalid_candidate");
-    }
-
+    // 기간·상태·선택 규칙 검증은 DB 함수(cast_ballot_internal)가 한 트랜잭션에서 한다.
     const { data: result, error } =
       election.auth_mode === "member_session"
-        ? await supabase.rpc("cast_member_vote", {
+        ? await supabase.rpc("cast_member_ballot", {
             p_election_id: electionId,
             p_user_id: userInfo.user.id,
-            p_selected_candidate: selectedCandidate,
+            p_selection: selection,
             p_receipt_hash: receiptHash,
           })
-        : await supabase.rpc("cast_registered_vote", {
+        : await supabase.rpc("cast_registered_ballot", {
             p_election_id: electionId,
             p_user_id: userInfo.user.id,
             p_user_email: getUserEmail(userInfo.user),
-            p_selected_candidate: selectedCandidate,
+            p_selection: selection,
             p_receipt_hash: receiptHash,
           });
 
@@ -109,13 +91,14 @@ export async function POST(request: Request) {
           error?: string;
           message?: string;
           receipt_hash?: string;
-          sequence_number?: number;
-          chain_hash?: string;
         }
       | null;
 
     if (!voteResult?.success) {
-      await recordFailedAttempt(ipAddress, endpoint);
+      // 선택 규칙 위반은 사용자 실수이므로 무차별 대입 카운트에 넣지 않는다
+      if (voteErrorStatus(voteResult?.error) !== 400) {
+        await recordFailedAttempt(ipAddress, endpoint);
+      }
       return jsonError(
         voteResult?.message ?? "투표를 완료하지 못했습니다.",
         voteErrorStatus(voteResult?.error),
@@ -127,8 +110,6 @@ export async function POST(request: Request) {
       success: true,
       message: voteResult.message ?? "투표가 완료되었습니다.",
       receiptHash: voteResult.receipt_hash ?? receiptHash,
-      sequenceNumber: voteResult.sequence_number ?? null,
-      chainHash: voteResult.chain_hash ?? null,
     });
   } catch (error) {
     await recordFailedAttempt(ipAddress, endpoint);

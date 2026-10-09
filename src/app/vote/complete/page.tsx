@@ -3,30 +3,21 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Copy, Home, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { RECEIPT_STORAGE_KEY, type SavedReceipt } from "@/components/ballot-sheet";
 import { Alert, Button, Panel } from "@/components/ui";
-
-type SavedReceipt = {
-  electionId: string;
-  electionName: string;
-  selectedName?: string;
-  salt: string;
-  receiptHash: string;
-  sequenceNumber: number | null;
-  chainHash: string | null;
-};
 
 export default function VoteCompletePage() {
   const [receipt, setReceipt] = useState<SavedReceipt | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const raw = localStorage.getItem("open_vote_last_receipt");
-    if (!raw) {
-      return;
-    }
-
     try {
-      setReceipt(JSON.parse(raw) as SavedReceipt);
+      // 예전 버전이 localStorage 에 남긴 영수증(선택 항목 포함)은 지운다
+      localStorage.removeItem(RECEIPT_STORAGE_KEY);
+      const raw = sessionStorage.getItem(RECEIPT_STORAGE_KEY);
+      if (raw) {
+        setReceipt(JSON.parse(raw) as SavedReceipt);
+      }
     } catch {
       setReceipt(null);
     }
@@ -42,8 +33,6 @@ export default function VoteCompletePage() {
         `election_id=${receipt.electionId}`,
         `receipt_hash=${receipt.receiptHash}`,
         `salt=${receipt.salt}`,
-        `sequence_number=${receipt.sequenceNumber ?? ""}`,
-        `chain_hash=${receipt.chainHash ?? ""}`,
       ].join("\n"),
     );
     setCopied(true);
@@ -74,11 +63,6 @@ export default function VoteCompletePage() {
               <ReceiptRow label="선거" value={receipt.electionName || receipt.electionId} />
               <ReceiptRow label="영수증 해시" value={receipt.receiptHash} mono />
               <ReceiptRow label="검증 Salt" value={receipt.salt} mono />
-              <ReceiptRow
-                label="Ledger 순번"
-                value={receipt.sequenceNumber?.toString() ?? "-"}
-              />
-              <ReceiptRow label="체인 해시" value={receipt.chainHash ?? "-"} mono />
             </dl>
             <Button className="mt-4 w-full" variant="secondary" onClick={copyReceipt}>
               <Copy size={17} aria-hidden="true" />
@@ -89,8 +73,9 @@ export default function VoteCompletePage() {
 
         <div className="mt-5 text-left">
           <Alert tone="info">
-            영수증 해시와 Salt는 이 기기에서만 보관됩니다. 선거 종료 후 공개 검증
-            목록에서 영수증 해시를 검색해 내 표가 포함되었는지 확인할 수 있습니다.
+            영수증은 이 창을 닫으면 사라지고 서버에도 누구 것인지 남지 않습니다. 확인하고
+            싶다면 지금 복사해 두세요. 투표가 끝나면 공개 검증 화면에서 영수증 해시로 내 표가
+            그대로 집계되었는지 확인할 수 있습니다.
           </Alert>
         </div>
 
