@@ -2,25 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Info, RefreshCw, Search, ShieldCheck, XCircle } from "lucide-react";
+import { CheckCircle2, Info, Lock, RefreshCw, Search, ShieldCheck, XCircle } from "lucide-react";
 import { Alert, Badge, Button, EmptyState, Field, Panel } from "@/components/ui";
 import { fetchJson } from "@/lib/client-fetch";
 import type { Election, PublicBallotLedger } from "@/lib/types";
-import { normalizeReceiptInput, verifyLedgerChain } from "@/lib/verification";
+import { describeSelection } from "@/lib/ballot";
+import { normalizeReceiptInput, verifyLedger } from "@/lib/verification";
 
 type LedgerResponse = {
   election: Election;
-  ledger: PublicBallotLedger;
+  ledger: PublicBallotLedger | null;
+  message?: string;
 };
 
 export default function VerifyPage() {
   const [elections, setElections] = useState<Election[]>([]);
   const [selectedElectionId, setSelectedElectionId] = useState("");
   const [ledger, setLedger] = useState<PublicBallotLedger | null>(null);
+  const [ledgerElection, setLedgerElection] = useState<Election | null>(null);
   const [receiptQuery, setReceiptQuery] = useState("");
   const [chainStatus, setChainStatus] = useState<{
     valid: boolean;
-    brokenAt: number | null;
     reason: string | null;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -51,8 +53,9 @@ export default function VerifyPage() {
     }
 
     const data = await fetchJson<LedgerResponse>(`/api/elections/${id}/ledger`);
+    setLedgerElection(data.election);
     setLedger(data.ledger);
-    setChainStatus(await verifyLedgerChain(id, data.ledger.ballots));
+    setChainStatus(data.ledger ? await verifyLedger(data.ledger.ballots, data.ledger.ledger_hash) : null);
   }
 
   async function refresh() {
@@ -89,7 +92,7 @@ export default function VerifyPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">공개 투표 검증</h1>
           <p className="mt-1 text-sm text-slate-500">
-            영수증 해시 검색과 해시 체인 검증을 브라우저에서 수행합니다.
+            투표 종료 후 공개 원장에서 내 영수증을 찾고, 원장 해시를 브라우저에서 다시 계산해 확인합니다.
           </p>
         </div>
         <div className="flex gap-2">
@@ -147,79 +150,83 @@ export default function VerifyPage() {
             </div>
           </Panel>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <StatusCard
-              label="Ledger 투표수"
-              value={`${ledger?.ballot_count ?? 0}건`}
-              icon={<Search size={22} aria-hidden="true" />}
+          {!ledger ? (
+            <EmptyState
+              icon={<Lock size={28} aria-hidden="true" />}
+              title="투표가 끝나면 공개 원장이 열립니다"
+              description="진행 중에 원장을 공개하면 표가 쌓이는 순서로 누가 무엇을 찍었는지 추정할 수 있어 종료 후에만 공개합니다."
             />
-            <StatusCard
-              label="체인 검증"
-              value={chainStatus?.valid ? "정상" : "오류"}
-              icon={
-                chainStatus?.valid ? (
-                  <CheckCircle2 size={22} aria-hidden="true" />
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-3">
+                <StatusCard
+                  label="원장 투표수"
+                  value={`${ledger.ballot_count}건`}
+                  icon={<Search size={22} aria-hidden="true" />}
+                />
+                <StatusCard
+                  label="원장 해시 검증"
+                  value={chainStatus?.valid ? "정상" : "오류"}
+                  icon={
+                    chainStatus?.valid ? (
+                      <CheckCircle2 size={22} aria-hidden="true" />
+                    ) : (
+                      <XCircle size={22} aria-hidden="true" />
+                    )
+                  }
+                  tone={chainStatus?.valid ? "success" : "danger"}
+                />
+                <StatusCard
+                  label="원장 해시"
+                  value={ledger.ledger_hash.slice(0, 12)}
+                  icon={<ShieldCheck size={22} aria-hidden="true" />}
+                />
+              </div>
+
+              {receipt ? (
+                matchedBallot ? (
+                  <Alert tone="success">
+                    영수증을 찾았습니다. 원장에 기록된 선택은 &ldquo;
+                    {describeSelection(matchedBallot.selection, ledgerElection?.candidates ?? [])}
+                    &rdquo;입니다. 내가 고른 것과 같은지 확인하세요.
+                  </Alert>
                 ) : (
-                  <XCircle size={22} aria-hidden="true" />
+                  <Alert>공개 원장에서 이 영수증 해시를 찾지 못했습니다.</Alert>
                 )
-              }
-              tone={chainStatus?.valid ? "success" : "danger"}
-            />
-            <StatusCard
-              label="최종 체인 해시"
-              value={ledger?.final_chain_hash?.slice(0, 12) ?? "-"}
-              icon={<ShieldCheck size={22} aria-hidden="true" />}
-            />
-          </div>
+              ) : null}
 
-          {receipt ? (
-            matchedBallot ? (
-              <Alert tone="success">
-                영수증을 찾았습니다. 공개 ledger 순번 {matchedBallot.sequence_number}번,
-                선택 항목 ID는 {matchedBallot.selected_candidate}입니다.
-              </Alert>
-            ) : (
-              <Alert>현재 공개 ledger에서 이 영수증 해시를 찾지 못했습니다.</Alert>
-            )
-          ) : null}
+              {chainStatus && !chainStatus.valid ? <Alert>원장 검증 실패: {chainStatus.reason}</Alert> : null}
 
-          {chainStatus && !chainStatus.valid ? (
-            <Alert>
-              해시 체인이 {chainStatus.brokenAt}번에서 깨졌습니다: {chainStatus.reason}
-            </Alert>
-          ) : null}
-
-          <Panel className="overflow-hidden">
-            <div className="border-b border-[var(--border)] p-4">
-              <h2 className="text-lg font-semibold">공개 Ledger</h2>
-            </div>
-            <div className="max-h-[520px] overflow-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">순번</th>
-                    <th className="px-4 py-3 font-medium">선택 항목</th>
-                    <th className="px-4 py-3 font-medium">영수증 해시</th>
-                    <th className="px-4 py-3 font-medium">체인 해시</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(ledger?.ballots ?? []).map((ballot) => (
-                    <tr key={ballot.sequence_number} className="border-t border-[var(--border)]">
-                      <td className="px-4 py-3">{ballot.sequence_number}</td>
-                      <td className="px-4 py-3">{ballot.selected_candidate}</td>
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {ballot.receipt_hash}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs">
-                        {ballot.chain_hash}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
+              <Panel className="overflow-hidden">
+                <div className="border-b border-[var(--border)] p-4">
+                  <h2 className="text-lg font-semibold">공개 원장</h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    영수증 해시 순서로 정렬되어 있어 투표한 순서는 알 수 없습니다. 전체 해시: {ledger.ledger_hash}
+                  </p>
+                </div>
+                <div className="max-h-[520px] overflow-auto">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead className="bg-slate-50 text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">영수증 해시</th>
+                        <th className="px-4 py-3 font-medium">선택</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ledger.ballots.map((ballot) => (
+                        <tr key={ballot.receipt_hash} className="border-t border-[var(--border)]">
+                          <td className="px-4 py-3 font-mono text-xs">{ballot.receipt_hash}</td>
+                          <td className="px-4 py-3">
+                            {describeSelection(ballot.selection, ledgerElection?.candidates ?? [])}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Panel>
+            </>
+          )}
         </>
       )}
     </div>

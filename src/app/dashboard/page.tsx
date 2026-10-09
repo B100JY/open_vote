@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, RefreshCw, Users, Vote } from "lucide-react";
 import { Alert, Badge, Button, EmptyState, Panel, ProgressBar } from "@/components/ui";
 import { fetchJson } from "@/lib/client-fetch";
-import { getBrowserSupabase } from "@/lib/supabase/browser";
 import type { Election, ElectionStats } from "@/lib/types";
 import {
   formatDate,
@@ -71,31 +70,9 @@ export default function DashboardPage() {
 
     const timer = window.setInterval(() => {
       loadStats(selectedElectionId).catch(() => undefined);
-    }, 5000);
+    }, 15_000);
 
-    const supabase = getBrowserSupabase();
-    const channel = supabase
-      ?.channel(`dashboard-${selectedElectionId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "app_open_vote",
-          table: "ballots",
-          filter: `election_id=eq.${selectedElectionId}`,
-        },
-        () => {
-          loadStats(selectedElectionId).catch(() => undefined);
-        },
-      )
-      .subscribe();
-
-    return () => {
-      window.clearInterval(timer);
-      if (channel) {
-        supabase?.removeChannel(channel);
-      }
-    };
+    return () => window.clearInterval(timer);
   }, [loadStats, selectedElectionId]);
 
   const voterStats = stats?.voter_registry ?? stats?.voter_codes;

@@ -18,78 +18,53 @@ export async function sha256Hex(value: string) {
   return toHex(new Uint8Array(digest));
 }
 
+/** 영수증 해시 = sha256(선거ID | 선택 정규 문자열 | salt). salt 는 유권자 기기에만 있다. */
 export async function createReceiptHash({
   electionId,
-  selectedCandidate,
+  selection,
   salt,
 }: {
   electionId: string;
-  selectedCandidate: string;
+  selection: string;
   salt: string;
 }) {
-  return sha256Hex(`${electionId}|${selectedCandidate}|${salt}`);
+  return sha256Hex(`${electionId}|${selection}|${salt}`);
 }
 
 export async function createVoteReceipt({
   electionId,
-  selectedCandidate,
+  selection,
 }: {
   electionId: string;
-  selectedCandidate: string;
+  selection: string;
 }) {
   const salt = createSalt();
-  const receiptHash = await createReceiptHash({
-    electionId,
-    selectedCandidate,
-    salt,
-  });
-
+  const receiptHash = await createReceiptHash({ electionId, selection, salt });
   return { salt, receiptHash };
 }
 
-export async function createDatabaseChainHash(
-  electionId: string,
-  ballot: PublicLedgerBallot,
-) {
-  return sha256Hex(
-    [
-      electionId,
-      ballot.sequence_number,
-      ballot.selected_candidate,
-      ballot.receipt_hash,
-      ballot.previous_chain_hash ?? "GENESIS",
-    ].join("|"),
-  );
+/**
+ * 공개 원장 해시 — DB `get_public_ballot_ledger` 와 같은 계산.
+ * 영수증 해시 오름차순(바이트 순)으로 "receipt:selection" 줄을 \n 으로 이어 sha256.
+ * 투표 순서 정보가 없으므로 원장을 공개해도 누가 언제 무엇을 찍었는지 이어지지 않는다.
+ */
+export async function computeLedgerHash(ballots: PublicLedgerBallot[]) {
+  const lines = ballots
+    .map((ballot) => `${ballot.receipt_hash}:${ballot.selection}`)
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  return sha256Hex(lines.join("\n"));
 }
 
-export async function verifyLedgerChain(
-  electionId: string,
-  ballots: PublicLedgerBallot[],
-) {
-  let previous: string | null = null;
-
-  for (const ballot of ballots) {
-    if (ballot.previous_chain_hash !== previous) {
-      return {
-        valid: false,
-        brokenAt: ballot.sequence_number,
-        reason: "previous_chain_hash 불일치",
-      };
-    }
-
-    const expected = await createDatabaseChainHash(electionId, ballot);
-    if (expected !== ballot.chain_hash) {
-      return {
-        valid: false,
-        brokenAt: ballot.sequence_number,
-        reason: "chain_hash 불일치",
-      };
-    }
-
-    previous = ballot.chain_hash;
+export async function verifyLedger(ballots: PublicLedgerBallot[], ledgerHash: string) {
+  const receipts = ballots.map((ballot) => ballot.receipt_hash);
+  if (new Set(receipts).size !== receipts.length) {
+    return { valid: false, reason: "같은 영수증 해시가 두 번 있습니다" };
   }
-
-  return { valid: true, brokenAt: null, reason: null };
+  const expected = await computeLedgerHash(ballots);
+  if (expected !== ledgerHash) {
+    return { valid: false, reason: "원장 해시가 공개 값과 다릅니다" };
+  }
+  return { valid: true, reason: null };
 }
 
 export function normalizeReceiptInput(value: string) {

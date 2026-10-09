@@ -1,12 +1,21 @@
 export type ElectionStatus = "draft" | "active" | "paused" | "closed";
 
+export type BallotType = "single" | "multi" | "rank" | "approve";
+
+export type BallotRules = {
+  ballot_type: BallotType;
+  min_choices: number;
+  max_choices: number;
+  allow_blank: boolean;
+};
+
 export type Candidate = {
   id: string;
   name: string;
   description?: string;
 };
 
-export type Election = {
+export type Election = BallotRules & {
   id: string;
   name: string;
   description: string | null;
@@ -28,9 +37,7 @@ export type VoterRegistry = {
   voter_name: string | null;
   has_voted: boolean;
   invited_at: string | null;
-  voted_at: string | null;
   created_at: string;
-  updated_at: string;
 };
 
 export type CreditTransaction = {
@@ -57,6 +64,8 @@ export type SmsInviteResponse = {
   skipped: number;
   dryRun: boolean;
   batchId: string | null;
+  /** 중간에 멈춘 이유(앞 묶음은 발송됨) */
+  stopped: string | null;
   failures: Array<{
     ref: string | null;
     phone: string;
@@ -87,30 +96,42 @@ export type ElectionStats = {
   progress: number;
 };
 
-export type VoteResultRow = {
+export type CandidateResult = {
   candidate_id: string;
-  vote_count: number;
-  percentage: number;
+  /** single/multi: 득표, rank: 순위에 넣은 표 수 */
+  votes?: number;
+  /** single/multi: 유효표 대비 %, rank: 1순위 득표 % */
+  percentage?: number;
+  /** approve */
+  yes?: number;
+  no?: number;
+  yes_percentage?: number;
+  /** rank */
+  first_choice?: number;
+  points?: number;
+  rank_counts?: number[];
 };
 
-export type VoteResults = {
+export type ElectionResults = {
   election_id: string;
-  total_votes: number;
-  results: VoteResultRow[];
+  ballot_type: BallotType;
+  min_choices: number;
+  max_choices: number;
+  total_ballots: number;
+  blank_ballots: number;
+  valid_ballots: number;
+  candidates: CandidateResult[];
 };
 
 export type PublicLedgerBallot = {
-  sequence_number: number;
-  selected_candidate: string;
   receipt_hash: string;
-  previous_chain_hash: string | null;
-  chain_hash: string;
+  selection: string;
 };
 
 export type PublicBallotLedger = {
   election_id: string;
   ballot_count: number;
-  final_chain_hash: string | null;
+  ledger_hash: string;
   ballots: PublicLedgerBallot[];
 };
 

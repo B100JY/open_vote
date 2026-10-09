@@ -35,7 +35,7 @@ export async function GET(
     const { data, error } = await supabase
       .from("voter_registry")
       .select(
-        "id, election_id, user_id, email, phone, voter_name, has_voted, invited_at, voted_at, created_at, updated_at",
+        "id, election_id, user_id, email, phone, voter_name, has_voted, invited_at, created_at",
       )
       .eq("election_id", id)
       .order("created_at", { ascending: true });

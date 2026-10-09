@@ -28,3 +28,16 @@ test("알 수 없는/누락 에러는 400으로 폴백한다", () => {
   assert.equal(voteErrorStatus(undefined), 400);
   assert.equal(voteErrorStatus(null), 400);
 });
+
+test("기간 밖 투표·방식 불일치는 403, 만료 링크는 401이다", () => {
+  assert.equal(voteErrorStatus("election_not_started"), 403);
+  assert.equal(voteErrorStatus("election_ended"), 403);
+  assert.equal(voteErrorStatus("auth_mode_mismatch"), 403);
+  assert.equal(voteErrorStatus("token_expired"), 401);
+});
+
+test("선택 규칙 위반은 400이다(무차별 대입 카운트 제외 기준)", () => {
+  assert.equal(voteErrorStatus("choice_count"), 400);
+  assert.equal(voteErrorStatus("blank_not_allowed"), 400);
+  assert.equal(voteErrorStatus("incomplete_selection"), 400);
+});

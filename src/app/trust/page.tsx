@@ -1,9 +1,9 @@
-import { 
-  ShieldCheck, 
-  Lock, 
-  Link as LinkIcon, 
-  FileCheck, 
-  Eye, 
+import {
+  ShieldCheck,
+  Lock,
+  Link as LinkIcon,
+  FileCheck,
+  Eye,
   Database,
   CheckCircle2,
   UserX
@@ -56,7 +56,11 @@ export default function TrustPage() {
                   </li>
                   <li className="flex gap-2 text-sm text-slate-700">
                     <CheckCircle2 size={18} className="text-green-600 shrink-0" />
-                    <span>투표 완료 후 신원 데이터와 기표 데이터는 물리적으로 분리됩니다.</span>
+                    <span>명부에는 투표 여부만 남고 투표 시각은 기록하지 않습니다.</span>
+                  </li>
+                  <li className="flex gap-2 text-sm text-slate-700">
+                    <CheckCircle2 size={18} className="text-green-600 shrink-0" />
+                    <span>투표지에는 순번이나 시각이 없어, 투표한 순서로 두 기록을 맞춰볼 수 없습니다.</span>
                   </li>
                 </ul>
               </div>
@@ -70,16 +74,16 @@ export default function TrustPage() {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
               <LinkIcon size={24} />
             </div>
-            <h2 className="text-2xl font-bold text-slate-950">조작이 불가능한 해시 체인 기술</h2>
+            <h2 className="text-2xl font-bold text-slate-950">마감 후 공개되는 투표 원장</h2>
           </div>
           <Panel className="p-6">
             <div className="grid gap-6 md:grid-cols-2">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">연결된 투표 원장</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">원장과 원장 해시</h3>
                 <p className="text-slate-600 leading-relaxed">
-                  모든 투표지는 이전 투표지의 지문(해시)을 포함하여 생성됩니다. 
-                  마치 체인처럼 엮여 있어, 중간에 투표지 하나를 몰래 바꾸거나 삭제하면 그 뒤에 이어진 모든 체인이 깨지게 됩니다. 
-                  이는 블록체인과 동일한 원리로 데이터의 무결성을 보장합니다.
+                  투표가 끝나면 모든 투표지를 영수증 번호 순서로 정렬한 원장과, 원장 전체의 지문(해시)이 공개됩니다.
+                  누구나 브라우저에서 지문을 다시 계산해 공개된 원장과 집계가 서로 맞는지 확인할 수 있습니다.
+                  진행 중에는 결과와 원장을 관리자에게도 보여주지 않습니다.
                 </p>
               </div>
               <div className="bg-slate-50 rounded-lg p-5 border border-slate-100 flex items-center justify-center">
@@ -106,10 +110,10 @@ export default function TrustPage() {
           <Panel className="p-6">
             <div className="grid gap-6 md:grid-cols-2">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">End-to-End Verifiability</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">내 표 확인</h3>
                 <p className="text-slate-600 leading-relaxed">
-                  투표를 마치면 나만 알 수 있는 디지털 영수증이 발급됩니다. 
-                  이 영수증 번호를 통해 선거 종료 후 내 표가 누락되지 않고 정확히 집계에 반영되었는지 직접 검색하여 확인할 수 있습니다.
+                  투표를 마치면 내 기기에서 만든 영수증 번호가 화면에 나옵니다. 서버에는 이 번호가 누구 것인지 남지 않습니다.
+                  선거가 끝난 뒤 공개 원장에서 이 번호를 찾아 내가 고른 내용 그대로 기록되었는지 확인할 수 있습니다.
                 </p>
               </div>
               <div className="bg-blue-600 rounded-lg p-5 text-white">
@@ -138,20 +142,20 @@ export default function TrustPage() {
               <div className="flex gap-4 items-start">
                 <Database className="text-slate-400 shrink-0 mt-1" size={20} />
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">강력한 보안 정책 (RLS)</h3>
+                  <h3 className="text-lg font-semibold text-slate-900">수정·삭제 경로 없음</h3>
                   <p className="text-slate-600">
-                    데이터베이스 차원에서 &lsquo;수정&rsquo;과 &lsquo;삭제&rsquo; 명령이 원천적으로 차단되어 있습니다.
-                    시스템 관리자라 할지라도 한번 제출된 투표지를 바꾸거나 삭제하는 것은 기술적으로 불가능하도록 설계되었습니다.
+                    앱 화면과 API에는 제출된 투표지를 고치거나 지우는 기능이 없고, 데이터베이스 보안 정책(RLS)도 외부의 수정·삭제를 막습니다.
+                    서버 운영자의 데이터베이스 권한까지 기술로 막을 수는 없기 때문에, 그 대신 마감 후 원장 해시와 영수증으로 누구나 확인할 수 있게 했습니다.
                   </p>
                 </div>
               </div>
               <div className="flex gap-4 items-start">
                 <Eye className="text-slate-400 shrink-0 mt-1" size={20} />
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">실시간 진행 현황 공개</h3>
+                  <h3 className="text-lg font-semibold text-slate-900">참여율만 진행 중 공개</h3>
                   <p className="text-slate-600">
-                    누가 누구에게 투표했는지는 비밀이지만, 얼마나 많은 유권자가 참여했는지는 실시간으로 공개됩니다. 
-                    집계 과정의 불투명성을 제거하여 모두가 납득할 수 있는 결과를 만들어냅니다.
+                    진행 중에는 몇 명이 참여했는지만 공개합니다. 항목별 득표는 투표가 마감된 뒤에 한 번에 공개되어,
+                    중간 결과가 남은 유권자의 선택에 영향을 주지 않습니다.
                   </p>
                 </div>
               </div>

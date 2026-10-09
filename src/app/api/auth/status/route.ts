@@ -11,10 +11,9 @@ type RegistryRow = {
   user_id: string | null;
   email: string | null;
   has_voted: boolean;
-  voted_at: string | null;
 };
 
-const registrySelect = "id, election_id, user_id, email, has_voted, voted_at";
+const registrySelect = "id, election_id, user_id, email, has_voted";
 
 export async function GET(request: Request) {
   try {
@@ -108,7 +107,6 @@ export async function GET(request: Request) {
       election,
       registered: true,
       hasVoted: registry.has_voted,
-      votedAt: registry.voted_at,
       voter: {
         email: registry.email,
       },

@@ -13,7 +13,6 @@ type VoterStatus = {
   election: { id: string; name: string; status: string };
   registered: boolean;
   hasVoted: boolean;
-  votedAt?: string | null;
   voter?: { email: string };
 };
 
