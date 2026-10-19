@@ -33,7 +33,7 @@
 1. 별도의 DB 복제본/격리된 시험 환경에 `20261010000000_ballot_types_and_secrecy.sql`을 적용하고, 표/명부 연계 불가능 및 클라이언트 SELECT·Realtime 차단 확인. 운영 DB는 아직 구버전(익명성 취약)일 수 있다.
 2. 격리된 DB에 `20261014000000_standalone_members.sql` 적용, RLS/서비스 롤 권한, `assert_permission_baseline`, 테스트 회원가입·로그인·가입 제한 검사.
 3. 구 코드를 배포하지 않고 DB만 변경한 기간이 발생하지 않도록 전체 배포 전략 점검. 승인 후 운영 SQL/코드 적용, 해당 시점의 실제 DB 상태 다시 읽어 검증.
-4. 공개 `/admin` 페이지에서 **OpenVote 전용 계정**을 `unionk25@gmail.com`로 등록. 기존 노조링크 로그인과 비밀번호를 연동하거나 이전하지 않는다.
+4. 공개 `/admin` 페이지에서 **OpenVote 전용 계정**을 `b100jy@gmail.com`(총괄관리자)로 등록. 기존 노조링크 로그인과 비밀번호를 연동하거나 이전하지 않는다.
 5. 운영자에 의해 이메일 소유/신원 확인이 끝난 다음, 아래 절차로 최초 관리자 권한을 수동으로 부여한다. 첫 가입자를 자동 admin으로 만드는 기능은 없다.
 6. 관리자 재로그인 → `/admin/members`에서 다른 회원 확인·생성자 승인 → 개인 포인트 지급 → 선거 초안 생성 → SMS 시험 → 실제 기표·종료·감사·공개 원장 확인.
 7. 운영 배포 전 테스트 휴대폰만 사용하고 SMS 중복 전송 방지. 운영 DB에 만든 시험 회원·선거는 삭제 가능성/법정 보존기간 검토 후 정리.
@@ -50,7 +50,7 @@ BEGIN
   SELECT m.id, m.auth_user_id INTO v_id, v_user_id
     FROM app_open_vote.members m
     JOIN auth.users u ON u.id = m.auth_user_id
-   WHERE m.email = 'unionk25@gmail.com'
+   WHERE m.email = 'b100jy@gmail.com'
      AND u.raw_app_meta_data->>'app' = 'open_vote'
      AND m.role = 'pending'
    FOR UPDATE OF m;

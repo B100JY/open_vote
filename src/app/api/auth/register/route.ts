@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     const email = normalizeSignupEmail(body?.email);
     const name = normalizeDisplayName(body?.name);
     if (!email || !name || !validateSignupPassword(body?.password)) {
-      return NextResponse.json({ error: "이름, 이메일, 12자 이상 비밀번호를 입력해주세요." }, { status: 400 });
+      return NextResponse.json({ error: "이름, 이메일, 8자 이상 비밀번호를 입력해주세요." }, { status: 400 });
     }
     const ip = getClientIp(request);
     const allowed = await recordSignupAttempt(email, ip);

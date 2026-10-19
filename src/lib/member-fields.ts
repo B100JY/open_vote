@@ -9,7 +9,7 @@ export function normalizeSignupEmail(value: unknown): string | null {
 }
 
 export function validateSignupPassword(value: unknown): value is string {
-  return typeof value === "string" && value.length >= 12 && value.length <= 128;
+  return typeof value === "string" && value.length >= 8 && value.length <= 128;
 }
 
 export function normalizeDisplayName(value: unknown): string | null {
