@@ -1,3 +1,4 @@
+import { rejectDisabledNozolinkIntegration } from "@/lib/nozolink-integration";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { authenticateApiClient } from "@/lib/api-key";
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic";
 
 /** 연동 조합 지갑 잔액 조회(서버-서버, X-Api-Key). nozolink 관리자 화면 표시용. */
 export async function GET(request: Request) {
+  const disabled = rejectDisabledNozolinkIntegration();
+  if (disabled) return disabled;
+
   const client = await authenticateApiClient(request);
   if (!client) {
     return jsonError("유효한 API 키가 필요합니다.", 401, "unauthorized");

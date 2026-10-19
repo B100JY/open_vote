@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
-import { getRequestUser, requireVoteCreator } from "@/lib/supabase/auth";
-import { isAdminUser, isVoteCreator } from "@/lib/admin-role";
+import { getRequestMember, requireVoteCreator } from "@/lib/supabase/auth";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { cleanBallotRules } from "@/lib/ballot";
 import { cleanCandidatesInput, createBilledElection } from "@/lib/create-election";
@@ -18,9 +17,9 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const userInfo = await getRequestUser(request);
-    const admin = userInfo ? isAdminUser(userInfo.user) : false;
-    const creator = userInfo ? isVoteCreator(userInfo.user) : false;
+    const userInfo = await getRequestMember(request);
+    const admin = userInfo?.member.role === "admin";
+    const creator = admin || userInfo?.member.role === "creator";
     const supabase = getServiceSupabase();
     // 마감 시각이 지난 선거를 먼저 닫는다(별도 스케줄러 없이 조회 때 정리)
     await supabase.rpc("close_expired_elections");

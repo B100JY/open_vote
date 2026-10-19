@@ -1,3 +1,4 @@
+import { rejectDisabledNozolinkIntegration } from "@/lib/nozolink-integration";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { authenticateApiClient } from "@/lib/api-key";
@@ -15,6 +16,9 @@ export const dynamic = "force-dynamic";
  * 표/후보/기표 시각 등 비공개 정보는 반환하지 않는다.
  */
 export async function POST(request: Request) {
+  const disabled = rejectDisabledNozolinkIntegration();
+  if (disabled) return disabled;
+
   const client = await authenticateApiClient(request);
   if (!client) {
     return jsonError("유효한 API 키가 필요합니다.", 401, "unauthorized");

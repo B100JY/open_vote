@@ -1,3 +1,4 @@
+import { rejectDisabledNozolinkIntegration } from "@/lib/nozolink-integration";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { authenticateApiClient } from "@/lib/api-key";
@@ -81,6 +82,9 @@ function cleanSmsVoters(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  const disabled = rejectDisabledNozolinkIntegration();
+  if (disabled) return disabled;
+
   try {
     const client = await authenticateApiClient(request);
     if (!client) {

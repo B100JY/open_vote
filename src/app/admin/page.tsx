@@ -777,6 +777,12 @@ function AdminCreateForm() {
             <Coins size={17} aria-hidden="true" />
             포인트 관리
           </Link>
+          <Link
+            href="/admin/members"
+            className="ml-2 mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+          >
+            회원 승인 (관리자)
+          </Link>
         </Panel>
         <Alert tone="info">
           투표 생성 시 유권자 1인당 {unitPrice}P가 선불 포인트에서 차감됩니다.
