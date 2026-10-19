@@ -21,5 +21,5 @@
 - 실제 사용자 비밀번호를 생성·변경하지 않았으며, 운영 시험 회원·선거를 만들지 않음.
 
 ## 다음
-사용자가 /admin에서 unionk25@gmail.com으로 OpenVote 전용 가입. 초대코드는 로컬 .env.local의 OPENVOTE_SIGNUP_INVITE_CODE에 비공개로 보관. 해당 값을 화면·채팅에 출력하지 않고 가입 입력란에 사용.
+사용자가 /admin에서 b100jy@gmail.com(총괄관리자)으로 OpenVote 전용 가입. 초대코드는 로컬 .env.local의 OPENVOTE_SIGNUP_INVITE_CODE에 비공개로 보관. 해당 값을 화면·채팅에 출력하지 않고 가입 입력란에 사용.
 가입 후 별도 최초 관리자 지정 절차, 포인트 및 실제 선거 E2E 수행.

@@ -147,9 +147,9 @@ export function AdminGate({ children, adminOnly = false }: { children: React.Rea
         <Field label="이메일" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
           autoComplete="username" required />
         <Field label="비밀번호" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-          minLength={mode === "register" ? 12 : undefined}
+          minLength={mode === "register" ? 8 : undefined}
           autoComplete={mode === "register" ? "new-password" : "current-password"} required
-          hint={mode === "register" ? "12자 이상. 현재 메일 인증·비밀번호 자동 재설정은 제공되지 않습니다." : undefined} />
+          hint={mode === "register" ? "8자 이상. 현재 메일 인증·비밀번호 자동 재설정은 제공되지 않습니다." : undefined} />
         {mode === "register" ? (
           <Field label="회원가입 초대코드" type="password" value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)} minLength={16} required

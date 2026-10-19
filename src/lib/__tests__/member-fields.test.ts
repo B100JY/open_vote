@@ -11,9 +11,9 @@ test("이메일 정규화와 기본 검증", () => {
   assert.equal(normalizeSignupEmail(null), null);
 });
 
-test("암호 최소 12자 및 길이 제한", () => {
-  assert.equal(validateSignupPassword("123456789012"), true);
-  assert.equal(validateSignupPassword("12345678901"), false);
+test("암호 최소 8자 및 길이 제한", () => {
+  assert.equal(validateSignupPassword("12345678"), true);
+  assert.equal(validateSignupPassword("1234567"), false);
   assert.equal(validateSignupPassword("A".repeat(129)), false);
   assert.equal(validateSignupPassword(123), false);
 });
