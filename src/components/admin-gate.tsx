@@ -1,190 +1,170 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LogIn, LogOut, ShieldAlert, ShieldCheck } from "lucide-react";
+import { LogIn, LogOut, ShieldCheck, UserPlus } from "lucide-react";
 import { Alert, Button, Field, Panel } from "@/components/ui";
-import { isAdminUser } from "@/lib/admin-role";
 import { getBrowserSupabase } from "@/lib/supabase/browser";
 
-type GateState = "checking" | "anonymous" | "forbidden" | "admin";
+type Role = "pending" | "creator" | "admin" | "suspended";
+type GateState = "checking" | "anonymous" | "pending" | "creator" | "admin" | "forbidden";
+type SessionResponse = { access_token: string; refresh_token: string };
+type MemberResponse = { member: { email: string; display_name: string; role: Role; email_verified: boolean } };
 
-/**
- * Supabase 로그인 에러를 사용자용 한국어 메시지로 변환합니다.
- */
-function toLoginError(caught: unknown): string {
-  const message = caught instanceof Error ? caught.message : "";
-
-  if (/invalid login credentials/i.test(message)) {
-    return "이메일 또는 비밀번호가 올바르지 않습니다.";
-  }
-  if (/email not confirmed/i.test(message)) {
-    return "이메일 인증이 완료되지 않은 계정입니다.";
-  }
-  if (message) {
-    return message;
-  }
-  return "로그인에 실패했습니다.";
-}
-
-/**
- * 관리자 전용 페이지를 감싸는 게이트.
- * - 비로그인: 이메일·비밀번호 로그인 폼 표시
- * - 로그인했으나 admin 권한 없음: 안내 + 로그아웃
- * - admin: children 렌더링
- *
- * 클라이언트 게이트는 UX용이며, 실제 인가는 서버의 requireAdmin이 강제합니다.
- */
-export function AdminGate({ children }: { children: React.ReactNode }) {
+export function AdminGate({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
   const [state, setState] = useState<GateState>("checking");
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     const supabase = getBrowserSupabase();
     if (!supabase) {
-      setError("Supabase 공개 환경 변수가 설정되지 않았습니다.");
+      setError("인증 환경 설정이 누락되었습니다.");
       setState("anonymous");
       return;
     }
 
-    function evaluate(session: { user?: unknown } | null) {
-      const user = session?.user as Parameters<typeof isAdminUser>[0];
-      if (!user) {
+    let revision = 0;
+    async function check(accessToken: string | undefined) {
+      const current = ++revision;
+      if (!accessToken) {
         setState("anonymous");
         return;
       }
-      setState(isAdminUser(user) ? "admin" : "forbidden");
+      try {
+        const response = await fetch("/api/auth/me", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
+        });
+        if (current !== revision) return;
+        if (!response.ok) {
+          setState("forbidden");
+          return;
+        }
+        const result = (await response.json()) as MemberResponse;
+        setState(result.member.role === "admin" ? "admin" : result.member.role === "creator" ? "creator" : "pending");
+      } catch {
+        if (current === revision) setState("forbidden");
+      }
     }
 
-    supabase.auth
-      .getSession()
-      .then(({ data }) => evaluate(data.session))
-      .catch(() => setState("anonymous"));
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      evaluate(session);
+    supabase.auth.getSession().then(({ data }) => check(data.session?.access_token)).catch(() => setState("anonymous"));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      void check(session?.access_token);
     });
-
-    return () => subscription.unsubscribe();
+    return () => { revision++; subscription.unsubscribe(); };
   }, []);
 
-  async function signIn(event: React.FormEvent) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setError("");
-
+    setNotice("");
     try {
       const supabase = getBrowserSupabase();
-      if (!supabase) {
-        throw new Error("Supabase 공개 환경 변수가 설정되지 않았습니다.");
-      }
-
+      if (!supabase) throw new Error("로그인을 사용할 수 없습니다.");
       const cleanEmail = email.trim().toLowerCase();
-      if (!cleanEmail || !password) {
-        throw new Error("이메일과 비밀번호를 모두 입력해주세요.");
+      if (!cleanEmail || !password) throw new Error("이메일과 비밀번호를 입력해주세요.");
+
+      if (mode === "register") {
+        const registered = await fetch("/api/auth/register", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: cleanEmail, password, name, inviteCode }),
+        });
+        const result = (await registered.json()) as { error?: string; message?: string };
+        if (!registered.ok) throw new Error(result.error ?? "회원가입에 실패했습니다.");
+        setNotice(result.message ?? "가입되었습니다.");
       }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password,
+      const response = await fetch("/api/auth/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail, password }),
+        cache: "no-store",
       });
-
-      if (signInError) {
-        throw signInError;
-      }
-
-      // 성공 시 onAuthStateChange가 세션을 반영해 admin/forbidden 상태로 전환합니다.
+      const result = (await response.json()) as SessionResponse & { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "로그인에 실패했습니다.");
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: result.access_token, refresh_token: result.refresh_token,
+      });
+      if (sessionError) throw new Error("로그인 세션을 저장하지 못했습니다.");
       setPassword("");
+      setInviteCode("");
     } catch (caught) {
-      setError(toLoginError(caught));
-    } finally {
-      setLoading(false);
-    }
+      setError(caught instanceof Error ? caught.message : "요청 처리에 실패했습니다.");
+    } finally { setLoading(false); }
   }
 
   async function signOut() {
-    const supabase = getBrowserSupabase();
-    // scope: "local" 필수. signOut() 의 기본값은 "global" 이고, 이 Supabase
-    // 프로젝트의 auth.users 는 노조링크·Cowork 와 공유하므로 기본값으로 부르면
-    // 이 버튼 하나가 그 사용자의 다른 앱 세션까지 전 기기에서 끊는다.
-    // 여기는 "다른 계정으로 로그인"(계정 전환)이므로 이 기기만 해제하면 된다.
-    await supabase?.auth.signOut({ scope: "local" });
+    await getBrowserSupabase()?.auth.signOut({ scope: "local" });
     setPassword("");
     setState("anonymous");
   }
 
-  if (state === "checking") {
-    return (
-      <Panel className="mx-auto max-w-md p-6 text-center">
-        <h1 className="text-lg font-semibold">관리자 권한 확인 중</h1>
-        <p className="mt-2 text-sm text-slate-500">로그인 상태를 확인하고 있습니다.</p>
-      </Panel>
-    );
-  }
+  if (state === "checking") return (
+    <Panel className="mx-auto max-w-md p-6 text-center">
+      <h1 className="text-lg font-semibold">OpenVote 로그인 확인 중</h1>
+    </Panel>
+  );
 
-  if (state === "admin") {
-    return <>{children}</>;
-  }
+  if (state === "admin" || (state === "creator" && !adminOnly)) return <>{children}</>;
 
-  if (state === "forbidden") {
-    return (
-      <Panel className="mx-auto max-w-md p-6 text-center">
-        <ShieldAlert className="mx-auto text-amber-600" size={40} aria-hidden="true" />
-        <h1 className="mt-4 text-lg font-semibold">관리자 권한이 없습니다</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-500">
-          현재 계정에는 관리자 권한이 없습니다. 관리자 권한이 있는 계정으로 다시
-          로그인해주세요.
-        </p>
-        <Button variant="secondary" className="mt-5" onClick={signOut}>
-          <LogOut size={18} aria-hidden="true" />
-          다른 계정으로 로그인
-        </Button>
-      </Panel>
-    );
-  }
+  if (state === "pending" || state === "creator" || state === "forbidden") return (
+    <Panel className="mx-auto max-w-md p-6 text-center">
+      <ShieldCheck className="mx-auto text-amber-600" size={38} />
+      <h1 className="mt-4 text-lg font-semibold">
+        {state === "pending" ? "가입 완료 · 선거 생성 승인 대기" : state === "creator" ? "관리자 전용 메뉴" : "OpenVote 전용 계정이 필요합니다"}
+      </h1>
+      <p className="mt-2 text-sm leading-6 text-slate-600">
+        {state === "pending"
+          ? "계정은 생성되었습니다. 관리자가 선거 생성자 권한을 승인하면 투표를 만들 수 있습니다."
+          : state === "creator" ? "선거 생성자 계정입니다. 회원 승인과 포인트 지급은 관리자만 이용할 수 있습니다."
+          : "다른 서비스 계정은 OpenVote에 자동으로 연결되지 않습니다. OpenVote에 별도로 가입해 주세요."}
+      </p>
+      <Button variant="secondary" className="mt-5" onClick={signOut}>
+        <LogOut size={17} /> 다른 계정으로 로그인
+      </Button>
+    </Panel>
+  );
 
   return (
     <Panel className="mx-auto max-w-md p-6">
-      <div className="mb-5 flex items-start gap-3">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-          <ShieldCheck size={22} aria-hidden="true" />
-        </span>
-        <div>
-          <h1 className="text-lg font-semibold text-slate-950">관리자 로그인</h1>
-          <p className="mt-1 text-sm leading-6 text-slate-500">
-            관리 기능은 관리자 계정의 이메일과 비밀번호로 로그인해야 사용할 수 있습니다.
-          </p>
-        </div>
-      </div>
-
-      <form className="grid gap-4" onSubmit={signIn}>
-        <Field
-          label="관리자 이메일"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          type="email"
-          placeholder="admin@example.com"
-          autoComplete="username"
-        />
-
-        <Field
-          label="비밀번호"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          type="password"
-          placeholder="••••••••"
-          autoComplete="current-password"
-        />
-
+      <h1 className="text-xl font-semibold text-slate-950">
+        {mode === "register" ? "OpenVote 회원가입" : "OpenVote 로그인"}
+      </h1>
+      <p className="mt-2 text-sm leading-6 text-slate-500">
+        다른 서비스 계정과 별도로 운영됩니다. 투표 유권자는 가입하지 않고 개인 링크로 참여할 수 있습니다.
+      </p>
+      <form className="mt-5 grid gap-4" onSubmit={submit}>
+        {mode === "register" ? (
+          <Field label="이름" value={name} onChange={(e) => setName(e.target.value)}
+            minLength={2} maxLength={60} required autoComplete="name" />
+        ) : null}
+        <Field label="이메일" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+          autoComplete="username" required />
+        <Field label="비밀번호" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+          minLength={mode === "register" ? 12 : undefined}
+          autoComplete={mode === "register" ? "new-password" : "current-password"} required
+          hint={mode === "register" ? "12자 이상. 현재 메일 인증·비밀번호 자동 재설정은 제공되지 않습니다." : undefined} />
+        {mode === "register" ? (
+          <Field label="회원가입 초대코드" type="password" value={inviteCode}
+            onChange={(e) => setInviteCode(e.target.value)} minLength={16} required
+            hint="운영자가 별도로 전달한 초대코드입니다. 투표 유권자에게는 필요하지 않습니다." />
+        ) : null}
+        {notice ? <Alert tone="success">{notice}</Alert> : null}
         {error ? <Alert>{error}</Alert> : null}
-
         <Button type="submit" disabled={loading}>
-          <LogIn size={18} aria-hidden="true" />
-          {loading ? "로그인 중" : "로그인"}
+          {mode === "register" ? <UserPlus size={18} /> : <LogIn size={18} />}
+          {loading ? "처리 중" : mode === "register" ? "가입하고 로그인" : "로그인"}
+        </Button>
+        <Button variant="secondary" onClick={() => {
+          setMode(mode === "login" ? "register" : "login"); setError(""); setNotice("");
+        }}>
+          {mode === "login" ? "새 OpenVote 계정 만들기" : "기존 계정으로 로그인"}
         </Button>
       </form>
     </Panel>

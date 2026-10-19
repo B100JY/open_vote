@@ -16,6 +16,7 @@ export async function GET(
   try {
     const { id } = await context.params;
     const supabase = getServiceSupabase();
+    await supabase.rpc("close_expired_elections");
     const { data, error } = await supabase
       .from("elections")
       .select("*")
@@ -89,6 +90,11 @@ export async function PATCH(
       .eq("id", id)
       .select("*")
       .single();
+
+    if (error?.code === "23514") {
+      // guard_election_status 트리거: 종료 후 재개, 준비중으로 되돌리기
+      return jsonError(error.message, 409, "invalid_status_transition");
+    }
 
     if (error || !data) {
       return jsonError("선거 상태를 변경하지 못했습니다.", 500, error?.message);

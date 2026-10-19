@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { requireAdmin } from "@/lib/supabase/auth";
-import { getServiceSupabase } from "@/lib/supabase/server";
+import { getServiceDbSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -36,24 +36,28 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = getServiceSupabase();
+    const supabase = getServiceDbSupabase();
 
-    const { data: userId, error: findError } = await supabase.rpc(
-      "find_user_id_by_email",
-      { p_email: email },
-    );
+    // 실제 메일 주소는 auth.users에 없고 OpenVote 전용 회원 표에만 보관한다.
+    // 다른 앱이 동일 이메일을 사용하더라도 그 계정에는 포인트를 지급하지 않는다.
+    const { data: member, error: findError } = await supabase
+      .from("members")
+      .select("auth_user_id, role, email_verified")
+      .eq("email", email.toLowerCase())
+      .maybeSingle();
 
     if (findError) {
-      return jsonError("사용자 조회 중 오류가 발생했습니다.", 500, findError.message);
+      return jsonError("OpenVote 회원 조회 중 오류가 발생했습니다.", 500, findError.message);
     }
 
-    if (!userId) {
+    if (!member || member.email_verified !== true || !["admin", "creator"].includes(member.role)) {
       return jsonError(
-        "해당 이메일의 사용자를 찾을 수 없습니다. 먼저 로그인(가입)한 사용자만 지급할 수 있습니다.",
+        "본인확인과 선거 생성 승인을 받은 OpenVote 회원만 포인트를 지급받을 수 있습니다.",
         404,
-        "user_not_found",
+        "member_not_found",
       );
     }
+    const userId = member.auth_user_id;
 
     const { data, error } = await supabase.rpc("adjust_credits", {
       p_user_id: userId,

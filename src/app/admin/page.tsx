@@ -16,8 +16,9 @@ import { AdminGate } from "@/components/admin-gate";
 import { Alert, Button, Field, Panel, Textarea } from "@/components/ui";
 import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
-import type { Candidate, CreditsSummary, Election, VoterRegistry } from "@/lib/types";
-import { csvEscape } from "@/lib/utils";
+import { BALLOT_TYPES, cleanBallotRules, describeBallotRules } from "@/lib/ballot";
+import type { BallotType, Candidate, CreditsSummary, Election, VoterRegistry } from "@/lib/types";
+import { csvEscape, formatDate } from "@/lib/utils";
 import { formatPhone, normalizePhone } from "@/lib/voters";
 
 type CreateResponse = {
@@ -34,6 +35,21 @@ type OptionPreset = {
 };
 
 type VoterMode = "sms" | "email";
+
+/** datetime-local 입력값(로컬 시각, 분 단위) */
+function toLocalInput(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** 기본 기간: 지금부터 사흘 뒤 18시까지 */
+function defaultPeriod() {
+  const start = new Date();
+  start.setSeconds(0, 0);
+  const end = new Date(start.getTime() + 3 * 24 * 60 * 60 * 1000);
+  end.setHours(18, 0, 0, 0);
+  return { start: toLocalInput(start), end: toLocalInput(end) };
+}
 
 const optionPresets: OptionPreset[] = [
   {
@@ -130,6 +146,11 @@ function AdminCreateForm() {
   const [candidateName, setCandidateName] = useState("");
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState("custom");
+  const [ballotType, setBallotType] = useState<BallotType>("single");
+  const [minChoices, setMinChoices] = useState(1);
+  const [maxChoices, setMaxChoices] = useState(1);
+  const [allowBlank, setAllowBlank] = useState(false);
+  const [period, setPeriod] = useState(defaultPeriod);
   const [credits, setCredits] = useState<CreditsSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -174,6 +195,12 @@ function AdminCreateForm() {
   const unitPrice = credits?.unitPrice ?? 10;
   const estimatedCost = voterCount * unitPrice;
   const insufficient = credits !== null && estimatedCost > credits.balance;
+
+  const filledCandidates = candidates.filter((candidate) => candidate.name.trim()).length;
+  const rulesCheck = cleanBallotRules(
+    { ballotType, minChoices, maxChoices, allowBlank },
+    Math.max(filledCandidates, 1),
+  );
 
   const votedCount = useMemo(
     () => created?.voters.filter((voter) => voter.has_voted).length ?? 0,
@@ -223,6 +250,12 @@ function AdminCreateForm() {
       const payload: Record<string, unknown> = {
         name,
         description,
+        ballotType,
+        minChoices,
+        maxChoices,
+        allowBlank,
+        startsAt: period.start ? new Date(period.start).toISOString() : undefined,
+        endsAt: period.end ? new Date(period.end).toISOString() : undefined,
         candidates: candidates
           .map((candidate) => ({
             ...candidate,
@@ -230,6 +263,14 @@ function AdminCreateForm() {
           }))
           .filter((candidate) => candidate.name),
       };
+
+      if (!rulesCheck.ok) {
+        throw new Error(rulesCheck.message);
+      }
+      // 마감이 지난 시각인지는 서버(create_billed_election)가 확인한다
+      if (!period.end) {
+        throw new Error("투표 마감 일시를 입력해주세요.");
+      }
 
       if (voterMode === "sms") {
         if (phoneParse.invalid.length > 0) {
@@ -264,6 +305,11 @@ function AdminCreateForm() {
     setCandidateName("");
     setCandidates([]);
     setSelectedPresetId("custom");
+    setBallotType("single");
+    setMinChoices(1);
+    setMaxChoices(1);
+    setAllowBlank(false);
+    setPeriod(defaultPeriod());
     setError("");
     setCreated(null);
   }
@@ -275,14 +321,13 @@ function AdminCreateForm() {
 
     const lines = [
       `선거명: ${csvEscape(created.election.name)}`,
-      "연락처,이름,투표여부,링크발송시각,투표시각",
+      "연락처,이름,투표여부,링크발송시각",
       ...created.voters.map((voter) =>
         [
           csvEscape(voter.phone ? formatPhone(voter.phone) : (voter.email ?? "")),
           csvEscape(voter.voter_name ?? ""),
           csvEscape(voter.has_voted ? "투표완료" : "투표전"),
           csvEscape(voter.invited_at),
-          csvEscape(voter.voted_at),
         ].join(","),
       ),
     ];
@@ -479,13 +524,108 @@ function AdminCreateForm() {
               )}
             </div>
 
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="grid gap-2">
+                <span className="text-sm font-medium text-slate-700">투표 시작</span>
+                <input
+                  type="datetime-local"
+                  className="h-11 rounded-lg border border-[var(--border)] bg-white px-3 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                  value={period.start}
+                  onChange={(event) => setPeriod((current) => ({ ...current, start: event.target.value }))}
+                />
+              </label>
+              <label className="grid gap-2">
+                <span className="text-sm font-medium text-slate-700">투표 마감</span>
+                <input
+                  type="datetime-local"
+                  className="h-11 rounded-lg border border-[var(--border)] bg-white px-3 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                  value={period.end}
+                  onChange={(event) => setPeriod((current) => ({ ...current, end: event.target.value }))}
+                />
+              </label>
+              <p className="text-xs text-slate-500 sm:col-span-2">
+                시작 전에는 링크를 열어도 투표할 수 없고, 마감 시각이 지나면 선거가 자동으로 종료되어 결과가 공개됩니다.
+              </p>
+            </div>
+
+            <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-slate-50 p-4">
+              <span className="text-sm font-medium text-slate-700">투표 방식</span>
+              <div className="grid gap-2 md:grid-cols-2">
+                {BALLOT_TYPES.map((type) => (
+                  <Button
+                    key={type.id}
+                    variant="secondary"
+                    className={
+                      ballotType === type.id
+                        ? "h-auto justify-start border-blue-300 bg-blue-50 px-4 py-3 text-left text-blue-900 hover:bg-blue-100"
+                        : "h-auto justify-start px-4 py-3 text-left"
+                    }
+                    onClick={() => {
+                      setBallotType(type.id);
+                      if (type.id === "multi" || type.id === "rank") {
+                        const fallback = Math.max(Math.min(filledCandidates, 2), 1);
+                        setMaxChoices((current) => (current > 1 ? current : fallback));
+                        setMinChoices(1);
+                      }
+                    }}
+                  >
+                    <span className="grid gap-1">
+                      <span>{type.label}</span>
+                      <span
+                        className={
+                          ballotType === type.id
+                            ? "text-xs font-medium text-blue-700"
+                            : "text-xs font-medium text-slate-500"
+                        }
+                      >
+                        {type.description}
+                      </span>
+                    </span>
+                  </Button>
+                ))}
+              </div>
+
+              {ballotType === "multi" || ballotType === "rank" ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <NumberField
+                    label={ballotType === "rank" ? "최소 순위 수" : "최소 선택 수"}
+                    value={minChoices}
+                    onChange={setMinChoices}
+                  />
+                  <NumberField
+                    label={ballotType === "rank" ? "최대 순위 수" : "최대 선택 수 (정원)"}
+                    value={maxChoices}
+                    onChange={setMaxChoices}
+                  />
+                </div>
+              ) : null}
+
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4"
+                  checked={allowBlank}
+                  onChange={(event) => setAllowBlank(event.target.checked)}
+                />
+                기권(백지) 투표 허용
+              </label>
+
+              {rulesCheck.ok ? (
+                <p className="text-xs text-slate-500">
+                  유권자 안내: {describeBallotRules(rulesCheck.rules, filledCandidates)}
+                </p>
+              ) : (
+                <Alert tone="warning">{rulesCheck.message}</Alert>
+              )}
+            </div>
+
             <div className="rounded-lg border border-[var(--border)] bg-slate-50 p-4">
               <div className="grid gap-4">
                 <div className="grid gap-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-medium text-slate-700">항목 등록</span>
                     <span className="text-xs text-slate-500">
-                      후보자, 찬반, 예/아니오, 안건 선택형을 모두 지원합니다.
+                      후보자 이름이나 안건 선택지를 등록합니다.
                     </span>
                   </div>
                   <div className="grid gap-2 md:grid-cols-2">
@@ -610,6 +750,10 @@ function AdminCreateForm() {
         <Panel className="p-5">
           <h2 className="text-lg font-semibold">생성 전 확인</h2>
           <dl className="mt-4 grid gap-3 text-sm">
+            <Row
+              label="투표 방식"
+              value={BALLOT_TYPES.find((type) => type.id === ballotType)?.label ?? ""}
+            />
             <Row label="항목" value={`${candidates.length}개`} />
             <Row label="유권자" value={`${voterCount}명`} />
             <Row
@@ -620,6 +764,10 @@ function AdminCreateForm() {
               label="포인트 잔액"
               value={credits ? `${credits.balance.toLocaleString()}P` : "확인 중"}
             />
+            <Row
+              label="마감"
+              value={period.end ? formatDate(new Date(period.end).toISOString()) : "-"}
+            />
             <Row label="초기 상태" value="준비중" />
           </dl>
           <Link
@@ -629,17 +777,46 @@ function AdminCreateForm() {
             <Coins size={17} aria-hidden="true" />
             포인트 관리
           </Link>
+          <Link
+            href="/admin/members"
+            className="ml-2 mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+          >
+            회원 승인 (관리자)
+          </Link>
         </Panel>
         <Alert tone="info">
           투표 생성 시 유권자 1인당 {unitPrice}P가 선불 포인트에서 차감됩니다.
           문자 발송은 생성 후 선거를 진행중으로 전환한 뒤 시작할 수 있습니다.
         </Alert>
         <Alert tone="info">
-          유권자 명부와 투표용지는 데이터베이스에서 연결되지 않습니다. 실제 투표는
-          서버 API가 참여 상태 갱신과 익명 투표지 저장을 원자적으로 처리합니다.
+          명부에는 투표 여부만 남고 투표 시각은 기록하지 않습니다. 투표지는 명부와
+          연결되지 않으며, 결과와 공개 원장은 투표가 종료된 뒤에만 열립니다.
         </Alert>
       </aside>
     </div>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <input
+        type="number"
+        min={1}
+        className="h-11 rounded-lg border border-[var(--border)] bg-white px-3 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        value={value}
+        onChange={(event) => onChange(Math.max(1, Math.floor(Number(event.target.value) || 1)))}
+      />
+    </label>
   );
 }
 

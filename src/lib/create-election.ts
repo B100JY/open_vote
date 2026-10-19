@@ -2,7 +2,8 @@ import type { Database } from "@/lib/supabase/database.types";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { getCreditPerVoter } from "@/lib/billing";
 import type { NewVoter } from "@/lib/voters";
-import type { Candidate } from "@/lib/types";
+import { CANDIDATE_ID_PATTERN } from "@/lib/ballot";
+import type { BallotRules, Candidate } from "@/lib/types";
 
 type Json = Database["app_open_vote"]["Tables"]["elections"]["Row"]["candidates"];
 
@@ -15,6 +16,9 @@ export type CreateElectionInput = {
   description?: string;
   candidates: Candidate[];
   voters: NewVoter[];
+  rules: BallotRules;
+  startsAt: Date;
+  endsAt: Date;
 };
 
 export type CreateElectionResult =
@@ -33,6 +37,7 @@ function cleanCandidatesInput(candidates: unknown): Candidate[] {
     return [];
   }
 
+  const used = new Set<string>();
   return candidates
     .map((candidate, index) => {
       if (!candidate || typeof candidate !== "object") {
@@ -46,13 +51,15 @@ function cleanCandidatesInput(candidates: unknown): Candidate[] {
         return null;
       }
 
-      const cleaned: Candidate = {
-        id:
-          typeof record.id === "string" && record.id.trim()
-            ? record.id.trim()
-            : `candidate_${index + 1}`,
-        name,
-      };
+      // 식별자는 정규 문자열 구분자(, > :)와 겹치지 않아야 한다(src/lib/ballot.ts)
+      const given = typeof record.id === "string" ? record.id.trim() : "";
+      let id = CANDIDATE_ID_PATTERN.test(given) && given !== "BLANK" && !used.has(given) ? given : `candidate_${index + 1}`;
+      while (used.has(id)) {
+        id = `${id}_`;
+      }
+      used.add(id);
+
+      const cleaned: Candidate = { id, name };
       const description =
         typeof record.description === "string" ? record.description.trim() : "";
       if (description) {
@@ -120,6 +127,12 @@ export async function createBilledElection(
     p_candidates: input.candidates as unknown as Json,
     p_voters: input.voters as unknown as Json,
     p_unit_price: unitPrice,
+    p_starts_at: input.startsAt.toISOString(),
+    p_ends_at: input.endsAt.toISOString(),
+    p_ballot_type: input.rules.ballot_type,
+    p_min_choices: input.rules.min_choices,
+    p_max_choices: input.rules.max_choices,
+    p_allow_blank: input.rules.allow_blank,
   });
 
   if (error) {

@@ -2363,31 +2363,25 @@ export type Database = {
       }
       ballots: {
         Row: {
-          chain_hash: string | null
           election_id: string
           id: string
-          previous_chain_hash: string | null
           receipt_hash: string | null
           selected_candidate: string
-          sequence_number: number | null
+          selections: Json | null
         }
         Insert: {
-          chain_hash?: string | null
           election_id: string
           id?: string
-          previous_chain_hash?: string | null
           receipt_hash?: string | null
           selected_candidate: string
-          sequence_number?: number | null
+          selections?: Json | null
         }
         Update: {
-          chain_hash?: string | null
           election_id?: string
           id?: string
-          previous_chain_hash?: string | null
           receipt_hash?: string | null
           selected_candidate?: string
-          sequence_number?: number | null
+          selections?: Json | null
         }
         Relationships: [
           {
@@ -2466,12 +2460,17 @@ export type Database = {
       }
       elections: {
         Row: {
+          allow_blank: boolean
+          auth_mode: string
+          ballot_type: string
           candidates: Json
           created_at: string | null
           created_by: string | null
           description: string | null
           ends_at: string | null
           id: string
+          max_choices: number
+          min_choices: number
           name: string
           starts_at: string | null
           status: string
@@ -2479,12 +2478,17 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          allow_blank?: boolean
+          auth_mode?: string
+          ballot_type?: string
           candidates?: Json
           created_at?: string | null
           created_by?: string | null
           description?: string | null
           ends_at?: string | null
           id?: string
+          max_choices?: number
+          min_choices?: number
           name: string
           starts_at?: string | null
           status?: string
@@ -2492,12 +2496,17 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          allow_blank?: boolean
+          auth_mode?: string
+          ballot_type?: string
           candidates?: Json
           created_at?: string | null
           created_by?: string | null
           description?: string | null
           ends_at?: string | null
           id?: string
+          max_choices?: number
+          min_choices?: number
           name?: string
           starts_at?: string | null
           status?: string
@@ -2576,7 +2585,6 @@ export type Database = {
       }
       voter_registry: {
         Row: {
-          access_token_hash: string | null
           created_at: string
           election_id: string
           email: string | null
@@ -2584,13 +2592,12 @@ export type Database = {
           id: string
           invited_at: string | null
           phone: string | null
+          token_hash: string | null
           updated_at: string
           user_id: string | null
-          voted_at: string | null
           voter_name: string | null
         }
         Insert: {
-          access_token_hash?: string | null
           created_at?: string
           election_id: string
           email?: string | null
@@ -2600,11 +2607,9 @@ export type Database = {
           phone?: string | null
           updated_at?: string
           user_id?: string | null
-          voted_at?: string | null
           voter_name?: string | null
         }
         Update: {
-          access_token_hash?: string | null
           created_at?: string
           election_id?: string
           email?: string | null
@@ -2614,7 +2619,6 @@ export type Database = {
           phone?: string | null
           updated_at?: string
           user_id?: string | null
-          voted_at?: string | null
           voter_name?: string | null
         }
         Relationships: [
@@ -2642,43 +2646,42 @@ export type Database = {
         }
         Returns: Json
       }
-      cast_link_vote: {
+      cast_link_ballot: {
+        Args: { p_receipt_hash: string; p_selection: Json; p_token: string }
+        Returns: Json
+      }
+      cast_member_ballot: {
         Args: {
           p_election_id: string
           p_receipt_hash: string
-          p_selected_candidate: string
-          p_token_hash: string
+          p_selection: Json
+          p_user_id: string
         }
         Returns: Json
       }
-      cast_registered_vote:
-        | {
-            Args: {
-              p_election_id: string
-              p_selected_candidate: string
-              p_user_email: string
-              p_user_id: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_election_id: string
-              p_receipt_hash: string
-              p_selected_candidate: string
-              p_user_email: string
-              p_user_id: string
-            }
-            Returns: Json
-          }
+      cast_registered_ballot: {
+        Args: {
+          p_election_id: string
+          p_receipt_hash: string
+          p_selection: Json
+          p_user_email: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      close_expired_elections: { Args: never; Returns: number }
       create_billed_election: {
         Args: {
+          p_allow_blank?: boolean
+          p_ballot_type?: string
           p_candidates: Json
           p_creator: string
           p_description: string
-          p_ends_at?: string
+          p_ends_at: string
+          p_max_choices?: number
+          p_min_choices?: number
           p_name: string
-          p_starts_at?: string
+          p_starts_at: string
           p_unit_price: number
           p_voters: Json
         }
@@ -2688,12 +2691,12 @@ export type Database = {
         Args: { p_email: string }
         Returns: string
       }
+      get_election_results: { Args: { p_election_id: string }; Returns: Json }
       get_election_stats: { Args: { p_election_id: string }; Returns: Json }
       get_public_ballot_ledger: {
         Args: { p_election_id: string }
         Returns: Json
       }
-      get_vote_results: { Args: { p_election_id: string }; Returns: Json }
       record_rate_limit_attempt: {
         Args: {
           p_block_duration_ms: number
@@ -2703,9 +2706,13 @@ export type Database = {
         }
         Returns: undefined
       }
-      rotate_voter_tokens: {
+      restore_voter_tokens: {
         Args: { p_election_id: string; p_tokens: Json }
         Returns: number
+      }
+      rotate_voter_tokens: {
+        Args: { p_election_id: string; p_tokens: Json }
+        Returns: Json
       }
     }
     Enums: {

@@ -1,3 +1,4 @@
+import { rejectDisabledNozolinkIntegration } from "@/lib/nozolink-integration";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { requireAdmin } from "@/lib/supabase/auth";
@@ -39,6 +40,9 @@ export async function GET(request: Request) {
  * 발급된 키로 생성되는 투표는 소유자(ownerEmail) 포인트 계정에서 과금됩니다.
  */
 export async function POST(request: Request) {
+  const disabled = rejectDisabledNozolinkIntegration();
+  if (disabled) return disabled;
+
   try {
     const auth = await requireAdmin(request);
     if (!auth.ok) {

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getClientIp, jsonError } from "@/lib/api-response";
 import { recordFailedAttempt, checkRateLimit } from "@/lib/rate-limit";
 import { getServiceDbSupabase } from "@/lib/supabase/server";
-import { normalizeCandidates } from "@/lib/utils";
+import { normalizeElection } from "@/lib/utils";
 import { voteErrorStatus } from "@/lib/vote-status";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ type RegistryRow = {
   token_expires_at: string | null;
 };
 
-/** 문자 토큰으로 선거/후보/참여상태를 조회한다(PII 미노출). */
+/** 문자 토큰으로 선거/후보/투표 방식/참여상태를 조회한다(PII 미노출). */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -29,6 +29,8 @@ export async function GET(request: Request) {
     }
 
     const supabase = getServiceDbSupabase();
+    await supabase.rpc("close_expired_elections");
+
     const { data: registry } = await supabase
       .from("voter_registry")
       .select("id, election_id, has_voted, token_expires_at")
@@ -39,48 +41,44 @@ export async function GET(request: Request) {
       return jsonError("유효하지 않은 투표 링크입니다.", 404, "invalid_token");
     }
 
-    const expired = registry.token_expires_at ? new Date(registry.token_expires_at) < new Date() : false;
-
-    const { data: election } = await supabase
+    const { data: row } = await supabase
       .from("elections")
-      .select("id, name, description, candidates, status, starts_at, ends_at")
+      .select("*")
       .eq("id", registry.election_id)
-      .maybeSingle<{
-        id: string;
-        name: string;
-        description: string | null;
-        candidates: unknown;
-        status: string;
-        starts_at: string | null;
-        ends_at: string | null;
-      }>();
+      .maybeSingle();
 
-    if (!election) {
+    if (!row) {
       return jsonError("선거 정보를 찾을 수 없습니다.", 404, "election_not_found");
     }
 
-    const ended = election.ends_at ? new Date(election.ends_at).getTime() < Date.now() : false;
+    const election = normalizeElection(row);
+    const now = Date.now();
 
     return NextResponse.json({
       election: {
         id: election.id,
         name: election.name,
         description: election.description,
-        candidates: normalizeCandidates(election.candidates),
+        candidates: election.candidates,
         status: election.status,
         starts_at: election.starts_at,
         ends_at: election.ends_at,
+        ballot_type: election.ballot_type,
+        min_choices: election.min_choices,
+        max_choices: election.max_choices,
+        allow_blank: election.allow_blank,
       },
       hasVoted: registry.has_voted,
-      expired,
-      ended,
+      expired: registry.token_expires_at ? new Date(registry.token_expires_at).getTime() < now : false,
+      ended: election.ends_at ? new Date(election.ends_at).getTime() <= now : false,
+      notStarted: election.starts_at ? new Date(election.starts_at).getTime() > now : false,
     });
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "투표 정보를 불러오지 못했습니다.", 500);
   }
 }
 
-/** 문자 토큰으로 기표한다(cast_link_vote). */
+/** 문자 토큰으로 기표한다(cast_link_ballot). 기간·선택 규칙 검증은 DB 함수가 한다. */
 export async function POST(request: Request) {
   const ipAddress = getClientIp(request);
   const endpoint = "cast_link_vote";
@@ -97,37 +95,18 @@ export async function POST(request: Request) {
 
     const body = (await request.json()) as Record<string, unknown>;
     const token = typeof body.token === "string" ? body.token.trim() : "";
-    const selectedCandidate = typeof body.selectedCandidate === "string" ? body.selectedCandidate.trim() : "";
+    const selection = body.selection;
     const receiptHash = typeof body.receiptHash === "string" ? body.receiptHash.trim().toLowerCase() : "";
 
-    if (!token || !selectedCandidate || !/^[a-f0-9]{64}$/.test(receiptHash)) {
+    if (!token || !selection || typeof selection !== "object" || !/^[a-f0-9]{64}$/.test(receiptHash)) {
       await recordFailedAttempt(ipAddress, endpoint);
       return jsonError("필수 항목이 누락되었거나 형식이 올바르지 않습니다.", 400);
     }
 
     const supabase = getServiceDbSupabase();
-
-    // 마감 일시 지난 선거는 자동 종료 이전이라도 거부한다.
-    const { data: reg } = await supabase
-      .from("voter_registry")
-      .select("election_id")
-      .eq("token_hash", tokenHash(token))
-      .maybeSingle<{ election_id: string }>();
-    if (reg?.election_id) {
-      const { data: el } = await supabase
-        .from("elections")
-        .select("ends_at")
-        .eq("id", reg.election_id)
-        .maybeSingle<{ ends_at: string | null }>();
-      if (el?.ends_at && new Date(el.ends_at).getTime() < Date.now()) {
-        await recordFailedAttempt(ipAddress, endpoint);
-        return jsonError("투표 기간이 마감되었습니다.", 403, "election_ended");
-      }
-    }
-
-    const { data: result, error } = await supabase.rpc("cast_link_vote", {
+    const { data: result, error } = await supabase.rpc("cast_link_ballot", {
       p_token: token,
-      p_selected_candidate: selectedCandidate,
+      p_selection: selection,
       p_receipt_hash: receiptHash,
     });
 
@@ -137,18 +116,14 @@ export async function POST(request: Request) {
     }
 
     const voteResult = result as
-      | {
-          success?: boolean;
-          error?: string;
-          message?: string;
-          receipt_hash?: string;
-          sequence_number?: number;
-          chain_hash?: string;
-        }
+      | { success?: boolean; error?: string; message?: string; receipt_hash?: string }
       | null;
 
     if (!voteResult?.success) {
-      await recordFailedAttempt(ipAddress, endpoint);
+      // 선택 규칙 위반은 사용자 실수이므로 무차별 대입 카운트에 넣지 않는다
+      if (voteErrorStatus(voteResult?.error) !== 400) {
+        await recordFailedAttempt(ipAddress, endpoint);
+      }
       return jsonError(
         voteResult?.message ?? "투표를 완료하지 못했습니다.",
         voteErrorStatus(voteResult?.error),
@@ -160,8 +135,6 @@ export async function POST(request: Request) {
       success: true,
       message: voteResult.message ?? "투표가 완료되었습니다.",
       receiptHash: voteResult.receipt_hash ?? receiptHash,
-      sequenceNumber: voteResult.sequence_number ?? null,
-      chainHash: voteResult.chain_hash ?? null,
     });
   } catch (error) {
     await recordFailedAttempt(ipAddress, endpoint);

@@ -1,3 +1,4 @@
+import { rejectDisabledNozolinkIntegration } from "@/lib/nozolink-integration";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { requireAdmin } from "@/lib/supabase/auth";
@@ -7,6 +8,9 @@ export const dynamic = "force-dynamic";
 
 /** 특정 연동 조합(union) 지갑 잔액과 최근 원장을 조회한다(관리자 전용). */
 export async function GET(request: Request) {
+  const disabled = rejectDisabledNozolinkIntegration();
+  if (disabled) return disabled;
+
   const auth = await requireAdmin(request);
   if (!auth.ok) {
     return jsonError(auth.message, auth.status, auth.error);
@@ -39,6 +43,9 @@ export async function GET(request: Request) {
 
 /** 연동 조합 지갑에 포인트를 충전/차감한다(관리자 지급). */
 export async function POST(request: Request) {
+  const disabled = rejectDisabledNozolinkIntegration();
+  if (disabled) return disabled;
+
   const auth = await requireAdmin(request);
   if (!auth.ok) {
     return jsonError(auth.message, auth.status, auth.error);

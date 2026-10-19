@@ -5,11 +5,14 @@
 
 ## 주요 흐름
 
-- 투표 생성자(admin/creator 롤): 선거 생성 시 유권자 1인당 포인트(기본 10P) 차감, 휴대폰 번호 명부 등록
+- 투표 생성자(admin/creator 롤): 선거 생성 시 유권자 1인당 포인트(기본 10P) 차감, 휴대폰 번호 명부 등록, 투표 기간(시작·마감) 지정
+- 투표 방식: 하나 선택 / 여러 개 선택(연기명, 최소~최대 개수) / 항목별 찬성·반대 / 순위 투표, 기권 허용 여부.
+  선거구가 여러 개면 선거구마다 선거를 따로 만듭니다(명부도 선거구별).
 - 선거 관리: 준비중, 진행중, 일시중단, 종료 상태 전환 + 투표 링크 문자(SMS) 발송
 - 유권자: 문자로 받은 1인 1회용 링크(`/v/<토큰>`)로 로그인 없이 투표 (이메일 매직 링크도 지원)
-- 대시보드: 진행 중인 선거의 참여율과 투표수 확인
-- 결과: 항목별 득표수와 득표율 확인
+- 대시보드: 진행 중인 선거의 참여율과 투표수 확인(15초마다 갱신)
+- 결과: **투표가 종료된 뒤에만** 항목별 득표 공개. 마감 시각이 지나면 조회 때 자동으로 종료됩니다.
+- 공개 검증: 종료 후 영수증 해시순 원장 + 원장 해시. 유권자는 투표 완료 화면의 영수증으로 자기 표를 확인합니다.
 - 외부 앱 연동: API 키(`X-Api-Key`)로 `POST /api/v1/elections` 호출해 생성부터 문자 발송까지 한 번에
 
 ## 문자(SMS) 투표 링크 + 포인트 과금
@@ -20,7 +23,9 @@
 - 템플릿 예: `[{app_name}] {name}님, 투표에 참여해주세요: {url}` — notifier 관리 웹에서 등록 후
   `SIMPLY_NOTIFIER_TEMPLATE`에 이름을 지정합니다.
 - 투표 링크 토큰: 원문은 문자에만 담기고 DB에는 SHA-256 해시만 저장합니다.
-  재발송하면 토큰이 회전되어 이전 링크는 무효화됩니다.
+  재발송하면 토큰이 회전되어 이전 링크는 무효화됩니다. 발송에 실패한 수신자는 이전 링크로 되돌립니다.
+- 대량 발송: notifier 1회 호출 한도(1000명) 때문에 `SIMPLY_NOTIFIER_MAX_BATCH`(기본 500)명씩 나눠 보냅니다.
+  한도 초과 등으로 중간에 멈추면 "문자 발송"을 다시 누르면 남은 사람에게 이어서 보냅니다.
 - 포인트: 1P=1원 기준 선불. 투표 생성 시 `유권자 수 × VOTE_CREDIT_PER_VOTER`(기본 10)를
   단일 DB 트랜잭션(`create_billed_election`)으로 차감하며, 잔액 부족 시 아무것도 생성되지 않습니다(402).
   충전은 입금 확인 후 관리자가 `/admin/credits`에서 지급합니다.
@@ -52,7 +57,7 @@ curl https://<배포주소>/api/v1/elections/<id> -H "X-Api-Key: ovk_..."
 - React 19
 - TypeScript
 - Tailwind CSS
-- Supabase PostgreSQL, RPC, Realtime
+- Supabase PostgreSQL, RPC
 
 ## 환경 변수
 
@@ -79,7 +84,7 @@ VOTE_LINK_BASE_URL=https://vote.example.com
 VOTE_CREDIT_PER_VOTER=10
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY`와 `SIMPLY_NOTIFIER_API_SECRET`은 서버 API 라우트에서만 사용됩니다. `NEXT_PUBLIC_*` 값은 브라우저 Realtime 구독용 공개 값입니다.
+`SUPABASE_SERVICE_ROLE_KEY`와 `SIMPLY_NOTIFIER_API_SECRET`은 서버 API 라우트에서만 사용됩니다. `NEXT_PUBLIC_*` 값은 브라우저 로그인(이메일·조합원 세션)용 공개 값입니다.
 
 ## 실행
 

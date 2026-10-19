@@ -1,3 +1,4 @@
+import { rejectDisabledNozolinkIntegration } from "@/lib/nozolink-integration";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { authenticateApiClient } from "@/lib/api-key";
@@ -14,6 +15,9 @@ export const dynamic = "force-dynamic";
  *  - 이미 표가 있으면 RPC 가 { success:false, error:'has_votes' } 로 거부한다.
  */
 export async function POST(request: Request) {
+  const disabled = rejectDisabledNozolinkIntegration();
+  if (disabled) return disabled;
+
   const client = await authenticateApiClient(request);
   if (!client) {
     return jsonError("유효한 API 키가 필요합니다.", 401, "unauthorized");

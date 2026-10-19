@@ -1,3 +1,4 @@
+import { isNozolinkIntegrationEnabled } from "@/lib/nozolink-integration";
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { requireAdmin } from "@/lib/supabase/auth";
@@ -18,6 +19,10 @@ export async function PATCH(
 
     const { id } = await context.params;
     const body = (await request.json()) as Record<string, unknown>;
+
+    if (body.isActive === true && !isNozolinkIntegrationEnabled()) {
+      return jsonError("노조링크 연동이 중단된 동안에는 API 키를 활성화할 수 없습니다.", 410, "integration_disabled");
+    }
 
     if (typeof body.isActive !== "boolean") {
       return jsonError("isActive(boolean) 값이 필요합니다.", 400, "invalid_request");
