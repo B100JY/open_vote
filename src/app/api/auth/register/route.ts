@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     await createStandaloneMember({ email, name, password: body.password });
     return NextResponse.json({
       success: true,
-      message: "OpenVote 전용 계정이 생성되었습니다. 선거 생성은 관리자 승인 후 가능합니다. 이메일은 아직 확인되지 않았습니다.",
+      message: "다모음 전용 계정이 생성되었습니다. 선거 생성은 관리자 승인 후 가능합니다. 이메일은 아직 확인되지 않았습니다.",
     }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "회원가입 오류" }, { status: 400 });

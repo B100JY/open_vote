@@ -1,4 +1,7 @@
-# Open Vote
+# 다모음 (open_vote)
+
+화면 이름은 **다모음**, 주소는 https://vote.bluerdot.net 이다(2026-10-21 이름 변경, 이전 openvote.bluerdot.net 은 새 주소로 넘긴다). 저장소·DB 스키마(`app_open_vote`)·내부 식별자는 `open_vote` 그대로 둔다.
+
 
 노동조합용 오픈소스 투표 시스템입니다. Next.js App Router 기반 웹 앱입니다.
 (초기 구현은 Flutter Web 이었고 Next.js 로 포팅했습니다. 2026-07-30 에 남아 있던 Flutter 소스·빌드 스크립트를 제거했습니다.)

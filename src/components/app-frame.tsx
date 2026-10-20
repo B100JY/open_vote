@@ -30,7 +30,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             </span>
             <span>
               <span className="block text-base font-semibold leading-5">
-                Open Vote
+                다모음
               </span>
               <span className="block text-xs text-slate-500">
                 노동조합용 오픈소스 투표 시스템

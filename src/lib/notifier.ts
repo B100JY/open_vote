@@ -13,7 +13,7 @@ import crypto from "node:crypto";
  *  - SIMPLY_NOTIFIER_BASE_URL    → 기본 https://notifier.bluerdot.net
  *  - SIMPLY_NOTIFIER_TEMPLATE    → 기본 "투표안내"
  *  - SIMPLY_NOTIFIER_DRY_RUN     → "true"면 실제 발송 없이 렌더 미리보기
- *  - VOTE_LINK_BASE_URL          → 투표 링크 도메인(기본 https://openvote.bluerdot.net)
+ *  - VOTE_LINK_BASE_URL          → 투표 링크 도메인(기본 https://vote.bluerdot.net)
  */
 
 const DEFAULT_BASE_URL = "https://notifier.bluerdot.net";
@@ -33,7 +33,7 @@ export function voteLinkBaseUrl() {
   return (
     process.env.VOTE_LINK_BASE_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
-    "https://openvote.bluerdot.net"
+    "https://vote.bluerdot.net"
   ).replace(/\/+$/, "");
 }
 

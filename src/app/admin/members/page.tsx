@@ -73,7 +73,7 @@ function MembersList() {
     <div className="grid gap-5">
       <Link href="/admin" className="text-sm font-semibold text-blue-700">← 투표 관리</Link>
       <Panel className="p-5 sm:p-6">
-        <h1 className="text-xl font-semibold">OpenVote 회원 승인</h1>
+        <h1 className="text-xl font-semibold">다모음 회원 승인</h1>
         <p className="mt-2 text-sm text-slate-600">
           새 가입자는 권한 대기 상태입니다. 신청자의 신원을 확인한 뒤 선거 생성자로 승인하세요.
           서비스 관리자는 보안상 이 화면에서 신규 지정할 수 없습니다.

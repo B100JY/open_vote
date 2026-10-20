@@ -35,9 +35,9 @@ export async function getRequestMember(request: Request) {
 /** 모든 관리 API는 앱 전용 회원 DB에서 최신 권한을 확인한다. */
 export async function requireAdmin(request: Request): Promise<AdminAuth> {
   const user = await getRequestMember(request);
-  if (!user) return { ok: false, status: 401, error: "unauthorized", message: "OpenVote 로그인이 필요합니다." };
+  if (!user) return { ok: false, status: 401, error: "unauthorized", message: "다모음 로그인이 필요합니다." };
   if (!canAdministrate(user.member.role)) {
-    return { ok: false, status: 403, error: "forbidden", message: "OpenVote 관리자 권한이 필요합니다." };
+    return { ok: false, status: 403, error: "forbidden", message: "다모음 관리자 권한이 필요합니다." };
   }
   return { ok: true, user, member: user.member };
 }
@@ -49,7 +49,7 @@ export async function isRequestAdmin(request: Request): Promise<boolean> {
 
 export async function requireVoteCreator(request: Request): Promise<CreatorAuth> {
   const user = await getRequestMember(request);
-  if (!user) return { ok: false, status: 401, error: "unauthorized", message: "OpenVote 로그인이 필요합니다." };
+  if (!user) return { ok: false, status: 401, error: "unauthorized", message: "다모음 로그인이 필요합니다." };
   if (!canCreateElection(user.member.role)) {
     return { ok: false, status: 403, error: "forbidden", message: "선거 생성자 승인이 필요합니다." };
   }
