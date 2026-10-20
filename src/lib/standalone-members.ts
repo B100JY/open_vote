@@ -22,7 +22,7 @@ export async function getMemberByAuthId(authUserId: string): Promise<Member | nu
     .select("id, auth_user_id, email, display_name, role, email_verified, created_at")
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-  if (error) throw new Error("OpenVote 회원 정보를 확인할 수 없습니다.");
+  if (error) throw new Error("다모음 회원 정보를 확인할 수 없습니다.");
   return (data as Member | null) ?? null;
 }
 

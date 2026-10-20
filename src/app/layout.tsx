@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Open Vote",
+  title: "다모음",
   description: "노동조합용 오픈소스 투표 시스템",
 };
 

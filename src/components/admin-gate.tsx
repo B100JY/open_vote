@@ -107,7 +107,7 @@ export function AdminGate({ children, adminOnly = false }: { children: React.Rea
 
   if (state === "checking") return (
     <Panel className="mx-auto max-w-md p-6 text-center">
-      <h1 className="text-lg font-semibold">OpenVote 로그인 확인 중</h1>
+      <h1 className="text-lg font-semibold">다모음 로그인 확인 중</h1>
     </Panel>
   );
 
@@ -117,13 +117,13 @@ export function AdminGate({ children, adminOnly = false }: { children: React.Rea
     <Panel className="mx-auto max-w-md p-6 text-center">
       <ShieldCheck className="mx-auto text-amber-600" size={38} />
       <h1 className="mt-4 text-lg font-semibold">
-        {state === "pending" ? "가입 완료 · 선거 생성 승인 대기" : state === "creator" ? "관리자 전용 메뉴" : "OpenVote 전용 계정이 필요합니다"}
+        {state === "pending" ? "가입 완료 · 선거 생성 승인 대기" : state === "creator" ? "관리자 전용 메뉴" : "다모음 전용 계정이 필요합니다"}
       </h1>
       <p className="mt-2 text-sm leading-6 text-slate-600">
         {state === "pending"
           ? "계정은 생성되었습니다. 관리자가 선거 생성자 권한을 승인하면 투표를 만들 수 있습니다."
           : state === "creator" ? "선거 생성자 계정입니다. 회원 승인과 포인트 지급은 관리자만 이용할 수 있습니다."
-          : "다른 서비스 계정은 OpenVote에 자동으로 연결되지 않습니다. OpenVote에 별도로 가입해 주세요."}
+          : "다른 서비스 계정은 다모음에 자동으로 연결되지 않습니다. 다모음에 별도로 가입해 주세요."}
       </p>
       <Button variant="secondary" className="mt-5" onClick={signOut}>
         <LogOut size={17} /> 다른 계정으로 로그인
@@ -134,7 +134,7 @@ export function AdminGate({ children, adminOnly = false }: { children: React.Rea
   return (
     <Panel className="mx-auto max-w-md p-6">
       <h1 className="text-xl font-semibold text-slate-950">
-        {mode === "register" ? "OpenVote 회원가입" : "OpenVote 로그인"}
+        {mode === "register" ? "다모음 회원가입" : "다모음 로그인"}
       </h1>
       <p className="mt-2 text-sm leading-6 text-slate-500">
         다른 서비스 계정과 별도로 운영됩니다. 투표 유권자는 가입하지 않고 개인 링크로 참여할 수 있습니다.
@@ -164,7 +164,7 @@ export function AdminGate({ children, adminOnly = false }: { children: React.Rea
         <Button variant="secondary" onClick={() => {
           setMode(mode === "login" ? "register" : "login"); setError(""); setNotice("");
         }}>
-          {mode === "login" ? "새 OpenVote 계정 만들기" : "기존 계정으로 로그인"}
+          {mode === "login" ? "새 다모음 계정 만들기" : "기존 계정으로 로그인"}
         </Button>
       </form>
     </Panel>
