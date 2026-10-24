@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Activity, RefreshCw, Users, Vote } from "lucide-react";
 import { Alert, Badge, Button, EmptyState, Panel, ProgressBar } from "@/components/ui";
 import { fetchJson } from "@/lib/client-fetch";
+import { pickElectionId } from "@/lib/election-search";
 import type { Election, ElectionStats } from "@/lib/types";
 import {
   formatDate,
@@ -29,8 +30,9 @@ export default function DashboardPage() {
       "/api/elections?status=active",
     );
     setElections(data.elections);
-    setSelectedElectionId((current) => current || data.elections[0]?.id || "");
-    return data.elections[0]?.id || "";
+    const first = pickElectionId(data.elections, window.location.search);
+    setSelectedElectionId((current) => current || first);
+    return first;
   }, []);
 
   const loadStats = useCallback(async (id: string) => {

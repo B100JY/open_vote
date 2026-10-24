@@ -67,7 +67,7 @@ const optionPresets: OptionPreset[] = [
   {
     id: "agree-disagree-hold",
     label: "찬성 / 반대 / 보류",
-    description: "노조 안건이나 의사결정 투표에 바로 사용할 수 있습니다.",
+    description: "안건이나 의사결정 투표에 바로 사용할 수 있습니다.",
     items: ["찬성", "반대", "보류"],
   },
   {
