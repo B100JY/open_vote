@@ -117,6 +117,10 @@ export default function HomePage() {
       <p className="text-center text-xs leading-5 text-slate-400">
         <Vote className="mr-1 inline" size={14} aria-hidden="true" />
         투표에 참여할 때는 가입이 필요 없습니다.
+        <span className="mx-2">·</span>
+        <Link href="/privacy" className="underline underline-offset-2">
+          개인정보처리방침
+        </Link>
       </p>
     </div>
   );
