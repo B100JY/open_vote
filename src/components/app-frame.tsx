@@ -30,7 +30,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             </span>
             <span>
               <span className="block text-base font-semibold leading-5">
-                다모음
+                모아이
               </span>
               <span className="block text-xs text-slate-500">
                 노동조합용 오픈소스 투표 시스템

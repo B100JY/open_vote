@@ -11,8 +11,8 @@ import {
 import { Badge, Panel } from "@/components/ui";
 
 export const metadata = {
-  title: "신뢰와 보안 | 다모음",
-  description: "다모음 투표 시스템이 왜 안전하고 조작 불가능한지 설명합니다.",
+  title: "신뢰와 보안 | 모아이",
+  description: "모아이 투표 시스템이 왜 안전하고 조작 불가능한지 설명합니다.",
 };
 
 export default function TrustPage() {
@@ -26,7 +26,7 @@ export default function TrustPage() {
           믿을 수 있는 투표를 위한 약속
         </h1>
         <p className="mt-4 text-lg text-slate-600">
-          다모음은 단순한 신뢰를 넘어, 수학적·기술적으로 증명 가능한 투명성을 지향합니다.
+          모아이은 단순한 신뢰를 넘어, 수학적·기술적으로 증명 가능한 투명성을 지향합니다.
         </p>
       </header>
 

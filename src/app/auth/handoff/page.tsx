@@ -10,7 +10,7 @@ export default function HandoffPage() {
       <section className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 text-center">
         <h1 className="text-lg font-semibold">노조링크 연동 중단</h1>
         <p className="mt-3 text-sm text-slate-600">
-          현재는 독립 서비스로 운영합니다. 다모음에서 직접 로그인하고 투표를 관리해주세요.
+          현재는 독립 서비스로 운영합니다. 모아이에서 직접 로그인하고 투표를 관리해주세요.
         </p>
       </section>
     );

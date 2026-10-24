@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "다모음",
+  title: "모아이",
   description: "노동조합용 오픈소스 투표 시스템",
 };
 

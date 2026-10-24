@@ -1,6 +1,6 @@
-# 다모음 (open_vote)
+# 모아이 (open_vote)
 
-화면 이름은 **다모음**, 주소는 https://vote.bluerdot.net 이다(2026-10-21 이름 변경, 이전 openvote.bluerdot.net 은 새 주소로 넘긴다). 저장소·DB 스키마(`app_open_vote`)·내부 식별자는 `open_vote` 그대로 둔다.
+화면 이름은 **모아이**, 주소는 https://vote.bluerdot.net 이다(2026-10-24 다모음에서 이름 변경, 이전 openvote.bluerdot.net 은 새 주소로 넘긴다). 저장소·DB 스키마(`app_open_vote`)·내부 식별자는 `open_vote` 그대로 둔다.
 
 
 노동조합용 오픈소스 투표 시스템입니다. Next.js App Router 기반 웹 앱입니다.
