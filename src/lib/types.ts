@@ -22,6 +22,8 @@ export type Election = BallotRules & {
   candidates: Candidate[];
   total_voter_codes: number;
   status: ElectionStatus;
+  /** sms_token(문자 개인 링크) · email_link 등. 화면에서 투표 안내를 고르는 데만 쓴다. */
+  auth_mode?: string | null;
   starts_at: string | null;
   ends_at: string | null;
   created_at: string;

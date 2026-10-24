@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 export function normalizeSignupEmail(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -22,14 +22,3 @@ export function syntheticAccountEmail(): string {
   return `u${randomUUID().replaceAll("-", "")}@member.openvote.invalid`;
 }
 
-
-/** 비공개 초대코드: 설정이 없거나 최소 길이에 미달하면 누구도 가입할 수 없다. */
-export function acceptsRegistrationCode(
-  supplied: unknown,
-  configured: string | undefined,
-): boolean {
-  if (typeof supplied !== "string" || !configured || configured.length < 16) return false;
-  const a = Buffer.from(supplied, "utf8");
-  const b = Buffer.from(configured, "utf8");
-  return a.length === b.length && timingSafeEqual(a, b);
-}

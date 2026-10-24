@@ -49,6 +49,7 @@ export function normalizeElection(value: unknown): Election {
     candidates: normalizeCandidates(record.candidates),
     total_voter_codes: Number(record.total_voter_codes ?? 0),
     status: normalizeStatus(record.status),
+    auth_mode: typeof record.auth_mode === "string" ? record.auth_mode : null,
     ballot_type: normalizeBallotType(record.ballot_type),
     min_choices: positiveInt(record.min_choices),
     max_choices: positiveInt(record.max_choices),

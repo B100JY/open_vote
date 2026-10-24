@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  normalizeSignupEmail, normalizeDisplayName, validateSignupPassword, syntheticAccountEmail, acceptsRegistrationCode,
+  normalizeSignupEmail, normalizeDisplayName, validateSignupPassword, syntheticAccountEmail,
 } from "../member-fields.ts";
 
 test("이메일 정규화와 기본 검증", () => {
@@ -26,12 +26,4 @@ test("실명 입력과 계정 별도 신원 보호", () => {
   assert.match(one, /^u[0-9a-f]{32}@member\.openvote\.invalid$/);
   assert.notEqual(one, two);
   assert.notEqual(one, "unionk25@gmail.com");
-});
-
-test("초대코드 없이는 공개 회원가입이 불가능", () => {
-  assert.equal(acceptsRegistrationCode("strong-secret-123456", undefined), false);
-  assert.equal(acceptsRegistrationCode("strong-secret-123456", "short"), false);
-  assert.equal(acceptsRegistrationCode("strong-secret-123456", "strong-secret-123456"), true);
-  assert.equal(acceptsRegistrationCode("strong-secret-123457", "strong-secret-123456"), false);
-  assert.equal(acceptsRegistrationCode(null, "strong-secret-123456"), false);
 });
