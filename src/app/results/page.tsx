@@ -5,6 +5,7 @@ import { BarChart3, Lock, RefreshCw, Trophy } from "lucide-react";
 import { Alert, Badge, Button, EmptyState, Panel, ProgressBar } from "@/components/ui";
 import { ballotTypeLabel } from "@/lib/ballot";
 import { fetchJson } from "@/lib/client-fetch";
+import { pickElectionId } from "@/lib/election-search";
 import type { CandidateResult, Election, ElectionResults } from "@/lib/types";
 import { formatDate, percentage, statusLabel, statusTone } from "@/lib/utils";
 
@@ -36,7 +37,7 @@ export default function ResultsPage() {
     try {
       const list = await fetchJson<{ elections: Election[] }>("/api/elections?visibility=public");
       setElections(list.elections);
-      const id = selectedElectionId || list.elections[0]?.id || "";
+      const id = selectedElectionId || pickElectionId(list.elections, window.location.search);
       setSelectedElectionId(id);
       await loadResults(id);
     } catch (caught) {

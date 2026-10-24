@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { syntheticAccountEmail } from "@/lib/member-fields";
 import { createClient } from "@supabase/supabase-js";
 import { getServiceDbSupabase, getServiceSupabase } from "@/lib/supabase/server";
 
@@ -14,7 +13,7 @@ export type Member = {
   created_at: string;
 };
 
-export { normalizeSignupEmail, validateSignupPassword, normalizeDisplayName } from "@/lib/member-fields";
+export { normalizeSignupEmail } from "@/lib/member-fields";
 
 export async function getMemberByAuthId(authUserId: string): Promise<Member | null> {
   const { data, error } = await getServiceDbSupabase()
@@ -49,33 +48,6 @@ export async function recordLoginAttempt(email: string, ip: string): Promise<boo
   });
   if (error) throw new Error("로그인 시도 제한을 확인할 수 없습니다.");
   return data === true;
-}
-
-export async function createStandaloneMember(input: { email: string; password: string; name: string }): Promise<void> {
-  const db = getServiceDbSupabase();
-  const { data: found, error: existingError } = await db.from("members")
-    .select("id").eq("email", input.email).maybeSingle();
-  if (existingError) throw new Error("회원 정보를 확인하지 못했습니다.");
-  if (found) throw new Error("가입할 수 없는 이메일입니다.");
-
-  const { data, error } = await getServiceSupabase().auth.admin.createUser({
-    email: syntheticAccountEmail(),
-    password: input.password,
-    email_confirm: true,
-    app_metadata: { app: "open_vote" },
-  });
-  if (error || !data.user) throw new Error("회원 계정 생성에 실패했습니다.");
-
-  // Auth와 Postgres 간 분산 트랜잭션이 없다. 실패 시 다른 앱 계정/신원을 삭제하지 않고
-  // OpenVote 합성 계정(앱 태그, 회원행 없음)을 운영 점검 대상으로 남긴다.
-  const result = await db.from("members").insert({
-    auth_user_id: data.user.id,
-    email: input.email,
-    display_name: input.name,
-    role: "pending",
-    email_verified: false,
-  });
-  if (result.error) throw new Error("회원 등록이 완료되지 않았습니다. 관리자에게 문의해 주세요.");
 }
 
 /**

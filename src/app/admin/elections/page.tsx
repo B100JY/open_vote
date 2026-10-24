@@ -31,6 +31,7 @@ import {
   statusTone,
 } from "@/lib/utils";
 import { ballotTypeLabel } from "@/lib/ballot";
+import { electionNumber } from "@/lib/election-search";
 import { formatPhone } from "@/lib/voters";
 
 type CodesResponse = {
@@ -259,6 +260,7 @@ function ManageElections() {
                     {election.description || "설명이 등록되지 않았습니다."}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-500">
+                    <span className="font-semibold text-slate-700">투표 번호 {electionNumber(election.id)}</span>
                     <span>등록 유권자 {election.total_voter_codes}명</span>
                     <span>{ballotTypeLabel(election.ballot_type)}</span>
                     <span>항목 {election.candidates.length}개</span>

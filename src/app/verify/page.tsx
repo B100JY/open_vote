@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Info, Lock, RefreshCw, Search, ShieldCheck, XCircle } from "lucide-react";
 import { Alert, Badge, Button, EmptyState, Field, Panel } from "@/components/ui";
 import { fetchJson } from "@/lib/client-fetch";
+import { pickElectionId } from "@/lib/election-search";
 import type { Election, PublicBallotLedger } from "@/lib/types";
 import { describeSelection } from "@/lib/ballot";
 import { normalizeReceiptInput, verifyLedger } from "@/lib/verification";
@@ -42,8 +43,9 @@ export default function VerifyPage() {
       "/api/elections?visibility=public",
     );
     setElections(data.elections);
-    setSelectedElectionId((current) => current || data.elections[0]?.id || "");
-    return currentOrFirst(selectedElectionId, data.elections);
+    const first = pickElectionId(data.elections, window.location.search);
+    setSelectedElectionId((current) => current || first);
+    return selectedElectionId || first;
   }
 
   async function loadLedger(id: string) {
@@ -231,10 +233,6 @@ export default function VerifyPage() {
       )}
     </div>
   );
-}
-
-function currentOrFirst(current: string, elections: Election[]) {
-  return current || elections[0]?.id || "";
 }
 
 function StatusCard({
