@@ -47,12 +47,12 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (findError) {
-      return jsonError("다모음 회원 조회 중 오류가 발생했습니다.", 500, findError.message);
+      return jsonError("모아이 회원 조회 중 오류가 발생했습니다.", 500, findError.message);
     }
 
     if (!member || member.email_verified !== true || !["admin", "creator"].includes(member.role)) {
       return jsonError(
-        "본인확인과 선거 생성 승인을 받은 다모음 회원만 포인트를 지급받을 수 있습니다.",
+        "본인확인과 선거 생성 승인을 받은 모아이 회원만 포인트를 지급받을 수 있습니다.",
         404,
         "member_not_found",
       );

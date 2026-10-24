@@ -38,7 +38,7 @@ export default function HomePage() {
               익명성과 투명성을 분리한 투표 시스템
             </Badge>
             <h1 className="max-w-2xl text-3xl font-semibold leading-tight text-slate-950 sm:text-4xl">
-              다모음
+              모아이
             </h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
               로그인 신원과 기표 데이터를 분리해 무기명 투표를 유지하면서, 진행률과
