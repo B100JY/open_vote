@@ -152,7 +152,8 @@ export function SettingsClient() {
 // notifier 에 등록할 권장 템플릿. {app_name} 은 notifier 앱 이름, 나머지는 모아이투표가 수신자마다 채운다.
 const RECOMMENDED_TEMPLATE = `[{app_name}] {title}
 {name}님 투표 링크: {url}
-링크가 걱정되면 vote.bluerdot.net 에서 코드 {code} 입력`;
+
+또는 vote.bluerdot.net 에서 코드 {code} 입력 후 투표하실 수도 있습니다.`;
 
 /**
  * 총괄관리자용 안내 문자 템플릿 안내. 템플릿 본문은 notifier 관리 화면에서만 고친다

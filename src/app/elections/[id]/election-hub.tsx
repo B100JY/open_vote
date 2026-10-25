@@ -93,7 +93,7 @@ export function ElectionHub({ electionId }: { electionId: string }) {
               <Panel className="grid gap-4 p-5">
                 <p className="break-keep text-sm leading-6 text-slate-700">
                   <Vote className="mb-2 text-blue-600" size={22} aria-hidden="true" />
-                  문자의 링크를 누르거나, 링크가 걱정되면 문자에 있는 <strong>투표 코드</strong>를 여기에 입력하세요.
+                  문자의 링크를 누르거나, 문자에 있는 <strong>투표 코드</strong>를 여기에 입력하세요.
                 </p>
                 <CodeEntry compact />
                 <ResendForm electionId={election.id} />
