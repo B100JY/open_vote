@@ -364,6 +364,7 @@ function ManageElections() {
                   ) : null}
                 </div>
               </div>
+              {election.auth_mode === "sms_token" ? <VoterResendList election={election} /> : null}
             </Panel>
           ))}
         </div>
@@ -438,6 +439,107 @@ function SmsTitleEditor({ election, onSaved }: { election: Election; onSaved: (e
       </div>
       <p className="text-xs text-slate-500">다음에 보내는 문자부터 적용됩니다. 비우면 기본 제목.</p>
       {error ? <Alert>{error}</Alert> : null}
+    </div>
+  );
+}
+
+const MAX_ADMIN_RESEND = 5;
+
+/**
+ * 유권자 목록 + 한 사람에게 다시 보내기(유권자당 최대 5회, 1회마다 1인 단가 차감).
+ * 열 때만 명부를 불러온다.
+ */
+function VoterResendList({ election }: { election: Election }) {
+  const [open, setOpen] = useState(false);
+  const [voters, setVoters] = useState<VoterRegistry[] | null>(null);
+  const [sendingId, setSendingId] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const active = election.status === "active";
+
+  async function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && voters === null) {
+      try {
+        const data = await fetchJson<CodesResponse>(`/api/elections/${election.id}/participants`, {
+          headers: await authHeaders(),
+        });
+        setVoters(data.voters);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "유권자 명부를 불러오지 못했습니다.");
+      }
+    }
+  }
+
+  async function resend(voter: VoterRegistry) {
+    setSendingId(voter.id);
+    setMessage("");
+    setError("");
+    try {
+      const result = await fetchJson<{ resendCount: number | null; cost: number; message: string }>(
+        `/api/elections/${election.id}/participants/${voter.id}/resend`,
+        { method: "POST", headers: await authHeaders() },
+      );
+      setVoters((current) =>
+        (current ?? []).map((item) =>
+          item.id === voter.id
+            ? { ...item, admin_resend_count: result.resendCount ?? (item.admin_resend_count ?? 0) + 1 }
+            : item,
+        ),
+      );
+      setMessage(`${voter.voter_name ?? formatPhone(voter.phone ?? "")}: ${result.message} (${result.cost}P 차감)`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "다시 보내지 못했습니다.");
+    } finally {
+      setSendingId("");
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-[var(--border)] pt-3">
+      <button type="button" onClick={toggle} className="text-sm font-semibold text-blue-700">
+        {open ? "유권자 목록 닫기" : "유권자 목록 · 개별 재발송"}
+      </button>
+      {open ? (
+        <div className="mt-3 grid gap-2">
+          <p className="text-xs text-slate-500">
+            한 사람에게 새 링크·코드를 다시 보냅니다(유권자당 최대 {MAX_ADMIN_RESEND}번, 1번마다 1인 단가 차감). 예전 링크·코드는 더 쓸 수 없습니다.
+          </p>
+          {message ? <Alert tone="success">{message}</Alert> : null}
+          {error ? <Alert>{error}</Alert> : null}
+          {voters === null && !error ? <p className="text-sm text-slate-400">불러오는 중</p> : null}
+          {voters && voters.length > 0 ? (
+            <ul className="grid divide-y divide-[var(--border)] rounded-lg border border-[var(--border)]">
+              {voters.map((voter) => {
+                const count = voter.admin_resend_count ?? 0;
+                const disabled = !active || voter.has_voted || !voter.phone || count >= MAX_ADMIN_RESEND || sendingId !== "";
+                return (
+                  <li key={voter.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                    <span className="min-w-0">
+                      <span className="font-medium text-slate-800">{voter.voter_name ?? "이름 없음"}</span>{" "}
+                      <span className="text-slate-500">{voter.phone ? formatPhone(voter.phone) : voter.email}</span>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">
+                        {voter.has_voted ? "투표완료" : voter.invited_at ? "발송됨" : "미발송"} · 재발송 {count}/{MAX_ADMIN_RESEND}
+                      </span>
+                      <Button
+                        variant="secondary"
+                        className="min-h-9 px-3"
+                        disabled={disabled}
+                        onClick={() => resend(voter)}
+                      >
+                        {sendingId === voter.id ? "보내는 중" : "다시 보내기"}
+                      </Button>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
