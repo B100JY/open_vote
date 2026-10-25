@@ -2472,6 +2472,7 @@ export type Database = {
           max_choices: number
           min_choices: number
           name: string
+          sms_title: string | null
           starts_at: string | null
           status: string
           total_voter_codes: number
@@ -2490,6 +2491,7 @@ export type Database = {
           max_choices?: number
           min_choices?: number
           name: string
+          sms_title?: string | null
           starts_at?: string | null
           status?: string
           total_voter_codes?: number
@@ -2508,6 +2510,7 @@ export type Database = {
           max_choices?: number
           min_choices?: number
           name?: string
+          sms_title?: string | null
           starts_at?: string | null
           status?: string
           total_voter_codes?: number
@@ -2585,6 +2588,7 @@ export type Database = {
       }
       voter_registry: {
         Row: {
+          code_hash: string | null
           created_at: string
           election_id: string
           email: string | null
@@ -2592,12 +2596,14 @@ export type Database = {
           id: string
           invited_at: string | null
           phone: string | null
+          self_resend_used: boolean
           token_hash: string | null
           updated_at: string
           user_id: string | null
           voter_name: string | null
         }
         Insert: {
+          code_hash?: string | null
           created_at?: string
           election_id: string
           email?: string | null
@@ -2605,11 +2611,13 @@ export type Database = {
           id?: string
           invited_at?: string | null
           phone?: string | null
+          self_resend_used?: boolean
           updated_at?: string
           user_id?: string | null
           voter_name?: string | null
         }
         Update: {
+          code_hash?: string | null
           created_at?: string
           election_id?: string
           email?: string | null
@@ -2617,6 +2625,7 @@ export type Database = {
           id?: string
           invited_at?: string | null
           phone?: string | null
+          self_resend_used?: boolean
           updated_at?: string
           user_id?: string | null
           voter_name?: string | null
@@ -2646,6 +2655,10 @@ export type Database = {
         }
         Returns: Json
       }
+      cast_code_ballot: {
+        Args: { p_code_hash: string; p_receipt_hash: string; p_selection: Json }
+        Returns: Json
+      }
       cast_link_ballot: {
         Args: { p_receipt_hash: string; p_selection: Json; p_token: string }
         Returns: Json
@@ -2667,6 +2680,10 @@ export type Database = {
           p_user_email: string
           p_user_id: string
         }
+        Returns: Json
+      }
+      charge_self_resend: {
+        Args: { p_election_id: string; p_phone: string; p_unit_price: number }
         Returns: Json
       }
       close_expired_elections: { Args: never; Returns: number }
@@ -2705,6 +2722,10 @@ export type Database = {
           p_max_attempts: number
         }
         Returns: undefined
+      }
+      refund_self_resend: {
+        Args: { p_election_id: string; p_unit_price: number; p_voter_id: string }
+        Returns: Json
       }
       restore_voter_tokens: {
         Args: { p_election_id: string; p_tokens: Json }

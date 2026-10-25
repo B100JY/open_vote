@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getClientIp, jsonError } from "@/lib/api-response";
 import { recordFailedAttempt, checkRateLimit } from "@/lib/rate-limit";
 import { getServiceDbSupabase } from "@/lib/supabase/server";
-import { normalizeElection } from "@/lib/utils";
+import { loadVoterLinkStatus } from "@/lib/vote-link-status";
 import { voteErrorStatus } from "@/lib/vote-status";
 
 export const dynamic = "force-dynamic";
@@ -11,13 +11,6 @@ export const dynamic = "force-dynamic";
 function tokenHash(token: string) {
   return crypto.createHash("sha256").update(token.trim()).digest("hex");
 }
-
-type RegistryRow = {
-  id: string;
-  election_id: string;
-  has_voted: boolean;
-  token_expires_at: string | null;
-};
 
 /** 문자 토큰으로 선거/후보/투표 방식/참여상태를 조회한다(PII 미노출). */
 export async function GET(request: Request) {
@@ -28,51 +21,11 @@ export async function GET(request: Request) {
       return jsonError("투표 토큰이 필요합니다.", 400, "missing_token");
     }
 
-    const supabase = getServiceDbSupabase();
-    await supabase.rpc("close_expired_elections");
-
-    const { data: registry } = await supabase
-      .from("voter_registry")
-      .select("id, election_id, has_voted, token_expires_at")
-      .eq("token_hash", tokenHash(token))
-      .maybeSingle<RegistryRow>();
-
-    if (!registry) {
+    const status = await loadVoterLinkStatus("token_hash", tokenHash(token));
+    if (!status) {
       return jsonError("유효하지 않은 투표 링크입니다.", 404, "invalid_token");
     }
-
-    const { data: row } = await supabase
-      .from("elections")
-      .select("*")
-      .eq("id", registry.election_id)
-      .maybeSingle();
-
-    if (!row) {
-      return jsonError("선거 정보를 찾을 수 없습니다.", 404, "election_not_found");
-    }
-
-    const election = normalizeElection(row);
-    const now = Date.now();
-
-    return NextResponse.json({
-      election: {
-        id: election.id,
-        name: election.name,
-        description: election.description,
-        candidates: election.candidates,
-        status: election.status,
-        starts_at: election.starts_at,
-        ends_at: election.ends_at,
-        ballot_type: election.ballot_type,
-        min_choices: election.min_choices,
-        max_choices: election.max_choices,
-        allow_blank: election.allow_blank,
-      },
-      hasVoted: registry.has_voted,
-      expired: registry.token_expires_at ? new Date(registry.token_expires_at).getTime() < now : false,
-      ended: election.ends_at ? new Date(election.ends_at).getTime() <= now : false,
-      notStarted: election.starts_at ? new Date(election.starts_at).getTime() > now : false,
-    });
+    return NextResponse.json(status);
   } catch (error) {
     return jsonError(error instanceof Error ? error.message : "투표 정보를 불러오지 못했습니다.", 500);
   }

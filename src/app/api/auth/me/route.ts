@@ -22,14 +22,14 @@ function memberBody(user: NonNullable<Awaited<ReturnType<typeof getRequestMember
 
 export async function GET(request: Request) {
   const user = await getRequestMember(request);
-  if (!user) return NextResponse.json({ error: "모아이 계정 로그인이 필요합니다." }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "모아이투표 계정 로그인이 필요합니다." }, { status: 401 });
   return NextResponse.json(memberBody(user), { headers: { "Cache-Control": "no-store" } });
 }
 
 /** 개인 설정: 지금은 표시 이름만 바꿀 수 있다. 메일·권한은 바꾸지 않는다. */
 export async function PATCH(request: Request) {
   const user = await getRequestMember(request);
-  if (!user) return NextResponse.json({ error: "모아이 계정 로그인이 필요합니다." }, { status: 401 });
+  if (!user) return NextResponse.json({ error: "모아이투표 계정 로그인이 필요합니다." }, { status: 401 });
   const body = await request.json().catch(() => ({}));
   const name = normalizeDisplayName(body?.displayName);
   if (!name) return NextResponse.json({ error: "이름은 2자 이상 60자 이하로 입력해 주세요." }, { status: 400 });

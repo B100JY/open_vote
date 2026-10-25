@@ -11,11 +11,11 @@ import { recordSignupAttempt } from "@/lib/standalone-members";
 import { getServiceDbSupabase, getServiceSupabase } from "@/lib/supabase/server";
 
 /**
- * 모아이 구글 가입·로그인.
+ * 모아이투표 구글 가입·로그인.
  *
  * 공유 Supabase 의 GoTrue 소셜 신원은 노조링크 전용이라(루트 AGENTS.md §3) signInWithOAuth 를 쓰지 않는다.
- * 모아이 자체 구글 OAuth 클라이언트로 code 를 바꾸고, 확인된 구글 메일로 members 를 찾거나 만든 뒤
- * 모아이 합성 계정(u…@member.openvote.invalid)의 magiclink token_hash 를 발급해 브라우저가 verifyOtp 로 세션을 연다.
+ * 모아이투표 자체 구글 OAuth 클라이언트로 code 를 바꾸고, 확인된 구글 메일로 members 를 찾거나 만든 뒤
+ * 모아이투표 합성 계정(u…@member.openvote.invalid)의 magiclink token_hash 를 발급해 브라우저가 verifyOtp 로 세션을 연다.
  */
 
 export async function exchangeGoogleCode(config: GoogleConfig, code: string, redirectUri: string) {
@@ -48,7 +48,7 @@ export class GoogleSignInError extends Error {
 }
 
 /**
- * 확인된 구글 메일로 모아이 회원을 찾거나 새로 만들고, 로그인용 magiclink token_hash 를 돌려준다.
+ * 확인된 구글 메일로 모아이투표 회원을 찾거나 새로 만들고, 로그인용 magiclink token_hash 를 돌려준다.
  * 메일이 같으면 비밀번호로 가입했던 기존 회원과 같은 사람으로 본다(구글이 메일 소유를 확인했으므로).
  */
 export async function signInWithGoogleIdentity(identity: GoogleIdentity, ip: string): Promise<string> {

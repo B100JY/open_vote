@@ -6,6 +6,7 @@ import { cleanBallotRules } from "@/lib/ballot";
 import { cleanCandidatesInput, createBilledElection } from "@/lib/create-election";
 import { cleanVoters, votersFromEmails } from "@/lib/voters";
 import type { ElectionStatus } from "@/lib/types";
+import { checkSmsTitle } from "@/lib/sms-title";
 import { normalizeElection } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -97,6 +98,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const smsTitle = checkSmsTitle(body.smsTitle);
+    if (!smsTitle.ok) {
+      return jsonError(smsTitle.message, 400, "invalid_sms_title");
+    }
+
     const rules = cleanBallotRules(body, candidates.length);
     if (!rules.ok) {
       return jsonError(rules.message, 400, "invalid_ballot_rules");
@@ -124,8 +130,19 @@ export async function POST(request: Request) {
       return jsonError(result.message, result.status, result.error);
     }
 
+    let created = result.election;
+    if (smsTitle.value) {
+      const { data: titled } = await getServiceSupabase()
+        .from("elections")
+        .update({ sms_title: smsTitle.value })
+        .eq("id", result.election.id)
+        .select("*")
+        .single();
+      if (titled) created = titled;
+    }
+
     return NextResponse.json({
-      election: normalizeElection(result.election),
+      election: normalizeElection(created),
       voters: result.voters,
       billing: result.billing,
     });

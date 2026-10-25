@@ -1,12 +1,12 @@
 /**
  * 투표 생성 과금 정책.
  *
- * 유권자 1인당 포인트(기본 10P = 10원 상당)를 투표 생성 시점에 선불 포인트
+ * 유권자 1인당 포인트(기본 30P, 장문 문자 원가 기준)를 투표 생성 시점에 선불 포인트
  * 계정(credit_accounts)에서 차감합니다. 포인트는 관리자 지급(충전 확인)으로
  * 적립되며, 실제 PG 결제 연동 전까지의 선불 모델입니다.
  */
 
-const DEFAULT_CREDIT_PER_VOTER = 10;
+const DEFAULT_CREDIT_PER_VOTER = 30;
 
 /** 유권자 1인당 차감 포인트. env `VOTE_CREDIT_PER_VOTER`로 조정 가능 */
 export function getCreditPerVoter(): number {

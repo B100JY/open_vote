@@ -21,7 +21,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
               </span>
               <span>
                 <span className="block text-base font-semibold leading-5">
-                  모아이
+                  모아이투표
                 </span>
                 <span className="block text-xs text-slate-500">
                   오픈소스 투표 시스템

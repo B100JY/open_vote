@@ -1,8 +1,8 @@
 import { Panel } from "@/components/ui";
 
 export const metadata = {
-  title: "개인정보처리방침 | 모아이",
-  description: "모아이가 어떤 개인정보를 왜 받고 어떻게 다루는지 설명합니다.",
+  title: "개인정보처리방침 | 모아이투표",
+  description: "모아이투표가 어떤 개인정보를 왜 받고 어떻게 다루는지 설명합니다.",
 };
 
 const sections: Array<{ title: string; body: React.ReactNode }> = [

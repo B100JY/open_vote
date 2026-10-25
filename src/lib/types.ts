@@ -24,6 +24,8 @@ export type Election = BallotRules & {
   status: ElectionStatus;
   /** sms_token(문자 개인 링크) · email_link 등. 화면에서 투표 안내를 고르는 데만 쓴다. */
   auth_mode?: string | null;
+  /** 안내 문자 제목(비우면 "<선거명> 투표 안내") */
+  sms_title?: string | null;
   starts_at: string | null;
   ends_at: string | null;
   created_at: string;

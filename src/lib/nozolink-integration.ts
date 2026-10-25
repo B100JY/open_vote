@@ -17,7 +17,7 @@ export function rejectDisabledNozolinkIntegration(): Response | null {
   return Response.json(
     {
       error: "integration_disabled",
-      message: "노조링크 연동을 잠정 중단했습니다. 모아이에서 직접 투표를 생성해 주세요.",
+      message: "노조링크 연동을 잠정 중단했습니다. 모아이투표에서 직접 투표를 생성해 주세요.",
     },
     { status: 410 },
   );

@@ -16,6 +16,7 @@ import { AdminGate } from "@/components/admin-gate";
 import { Alert, Button, Field, Panel, Textarea } from "@/components/ui";
 import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
+import { SMS_TITLE_MAX, defaultSmsTitle } from "@/lib/sms-title";
 import { BALLOT_TYPES, cleanBallotRules, describeBallotRules } from "@/lib/ballot";
 import type { BallotType, Candidate, CreditsSummary, Election, VoterRegistry } from "@/lib/types";
 import { csvEscape, formatDate } from "@/lib/utils";
@@ -140,6 +141,7 @@ export default function AdminPage() {
 function AdminCreateForm() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [smsTitle, setSmsTitle] = useState("");
   const [voterMode, setVoterMode] = useState<VoterMode>("sms");
   const [voterPhones, setVoterPhones] = useState("");
   const [voterEmails, setVoterEmails] = useState("");
@@ -192,7 +194,7 @@ function AdminCreateForm() {
 
   const voterCount =
     voterMode === "sms" ? phoneParse.voters.length : voterEmailList.length;
-  const unitPrice = credits?.unitPrice ?? 10;
+  const unitPrice = credits?.unitPrice ?? 30;
   const estimatedCost = voterCount * unitPrice;
   const insufficient = credits !== null && estimatedCost > credits.balance;
 
@@ -250,6 +252,7 @@ function AdminCreateForm() {
       const payload: Record<string, unknown> = {
         name,
         description,
+        smsTitle,
         ballotType,
         minChoices,
         maxChoices,
@@ -300,6 +303,7 @@ function AdminCreateForm() {
   function reset() {
     setName("");
     setDescription("");
+    setSmsTitle("");
     setVoterPhones("");
     setVoterEmails("");
     setCandidateName("");
@@ -469,6 +473,16 @@ function AdminCreateForm() {
               onChange={(event) => setDescription(event.target.value)}
               placeholder="투표에 대한 간단한 설명"
             />
+            {voterMode === "sms" ? (
+              <Field
+                label="안내 문자 제목"
+                value={smsTitle}
+                onChange={(event) => setSmsTitle(event.target.value)}
+                maxLength={SMS_TITLE_MAX}
+                placeholder={defaultSmsTitle(name || "투표명")}
+                hint={`문자 첫 줄에 들어갑니다(${SMS_TITLE_MAX}자까지, 링크·전화번호·이모지 불가). 비우면 "${defaultSmsTitle(name || "투표명")}". 나머지 문구는 정해진 형식입니다.`}
+              />
+            ) : null}
 
             <div className="grid gap-2">
               <span className="text-sm font-medium text-slate-700">유권자 명부</span>

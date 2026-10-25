@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowLeft, BarChart3, LayoutDashboard, ShieldCheck, Vote } from "lucide-react";
-import { Badge, Panel } from "@/components/ui";
+import { CodeEntry } from "@/components/code-entry";
+import { Alert, Badge, Button, Panel } from "@/components/ui";
 import { fetchJson } from "@/lib/client-fetch";
 import { electionNumber } from "@/lib/election-search";
 import type { Election } from "@/lib/types";
@@ -89,9 +90,13 @@ export function ElectionHub({ electionId }: { electionId: string }) {
         <div className="grid gap-3">
           {election.status === "active" ? (
             smsOnly ? (
-              <Panel className="p-5 text-sm leading-6 text-slate-700">
-                <Vote className="mb-2 text-blue-600" size={22} aria-hidden="true" />
-                이 투표는 <strong>문자로 받은 개인 링크</strong>로 참여합니다. 문자의 링크를 눌러 주세요.
+              <Panel className="grid gap-4 p-5">
+                <p className="break-keep text-sm leading-6 text-slate-700">
+                  <Vote className="mb-2 text-blue-600" size={22} aria-hidden="true" />
+                  문자의 링크를 누르거나, 문자에 있는 <strong>투표 코드</strong>를 여기에 입력하세요.
+                </p>
+                <CodeEntry compact />
+                <ResendForm electionId={election.id} />
               </Panel>
             ) : (
               <ActionLink href={`/vote/${id}/auth`} primary icon={<Vote size={18} aria-hidden="true" />}>
@@ -146,5 +151,69 @@ function ActionLink({
       {icon}
       {children}
     </Link>
+  );
+}
+
+/** 코드를 잃어버린 유권자 본인 재발송(1회). 결과와 상관없이 같은 안내를 보여 준다(번호 떠보기 방지). */
+function ResendForm({ electionId }: { electionId: string }) {
+  const [open, setOpen] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSending(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await fetchJson<{ message: string }>("/api/vote/resend", {
+        method: "POST",
+        body: JSON.stringify({ electionId, phone }),
+      });
+      setMessage(result.message);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "요청을 처리하지 못했습니다.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-fit text-sm text-slate-500 underline underline-offset-2 hover:text-slate-800"
+      >
+        코드를 잃어버렸어요
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="grid gap-2 border-t border-[var(--border)] pt-4">
+      <p className="break-keep text-sm leading-6 text-slate-600">
+        명부에 등록된 휴대폰 번호를 넣으면 새 링크와 코드를 <strong>한 번</strong> 다시 보내 드립니다.
+        예전 링크와 코드는 더 쓸 수 없습니다.
+      </p>
+      <div className="flex gap-2">
+        <input
+          type="tel"
+          inputMode="numeric"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder="010-0000-0000"
+          autoComplete="tel"
+          className="h-12 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-white px-3 text-base outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        />
+        <Button type="submit" disabled={sending || !!message} className="h-12 shrink-0">
+          {sending ? "보내는 중" : "다시 받기"}
+        </Button>
+      </div>
+      {message ? <Alert tone="success">{message}</Alert> : null}
+      {error ? <Alert>{error}</Alert> : null}
+    </form>
   );
 }
