@@ -42,6 +42,8 @@ export type VoterRegistry = {
   has_voted: boolean;
   invited_at: string | null;
   created_at: string;
+  /** 관리 화면 개별 재발송 횟수(최대 5) */
+  admin_resend_count?: number;
 };
 
 export type CreditTransaction = {
