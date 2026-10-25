@@ -114,7 +114,7 @@ export function AdminGate({ children, adminOnly = false }: { children: React.Rea
 
   if (state === "checking") return (
     <Panel className="mx-auto max-w-md p-6 text-center">
-      <h1 className="text-lg font-semibold">모아이 로그인 확인 중</h1>
+      <h1 className="text-lg font-semibold">모아이투표 로그인 확인 중</h1>
     </Panel>
   );
 
@@ -124,7 +124,7 @@ export function AdminGate({ children, adminOnly = false }: { children: React.Rea
     <Panel className="mx-auto max-w-md p-6 text-center">
       <ShieldCheck className="mx-auto text-amber-600" size={38} />
       <h1 className="mt-4 text-lg font-semibold">
-        {state === "pending" ? "가입 완료 · 투표 만들기 승인 대기" : state === "creator" ? "관리자 전용 메뉴" : "모아이 회원 정보가 없습니다"}
+        {state === "pending" ? "가입 완료 · 투표 만들기 승인 대기" : state === "creator" ? "관리자 전용 메뉴" : "모아이투표 회원 정보가 없습니다"}
       </h1>
       <p className="mt-2 text-sm leading-6 text-slate-600">
         {state === "pending"

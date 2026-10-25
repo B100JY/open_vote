@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, ClipboardList, Search, ShieldCheck, Vote } from "lucide-react";
+import { CodeEntry } from "@/components/code-entry";
 import { Badge, Panel } from "@/components/ui";
 import { fetchJson } from "@/lib/client-fetch";
 import { electionNumber, matchesElectionQuery } from "@/lib/election-search";
@@ -37,12 +38,19 @@ export default function HomePage() {
   return (
     <div className="mx-auto grid w-full max-w-xl gap-6 pt-2 sm:pt-6">
       <section className="text-center">
-        <h1 className="text-3xl font-semibold text-slate-950 sm:text-4xl">모아이</h1>
+        <h1 className="text-3xl font-semibold text-slate-950 sm:text-4xl">모아이투표</h1>
         <p className="mt-3 break-keep text-base leading-7 text-slate-600">
           문자로 받은 링크를 누르면 바로 투표할 수 있습니다.
           <br className="hidden sm:block" /> 누가 누구를 뽑았는지는 운영자도 알 수 없습니다.
         </p>
       </section>
+
+      <Panel className="p-4">
+        <CodeEntry />
+        <p className="mt-2 px-1 break-keep text-xs leading-5 text-slate-500">
+          문자의 링크를 누르지 않아도, 문자에 있는 6자리 코드로 여기서 투표할 수 있습니다.
+        </p>
+      </Panel>
 
       <label className="relative block">
         <span className="sr-only">투표 찾기</span>

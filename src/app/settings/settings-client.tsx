@@ -68,7 +68,7 @@ export function SettingsClient() {
   }
 
   async function signOut() {
-    // 공유 auth 라 반드시 local: 이 브라우저의 모아이 세션만 끝낸다.
+    // 공유 auth 라 반드시 local: 이 브라우저의 모아이투표 세션만 끝낸다.
     await getBrowserSupabase()?.auth.signOut({ scope: "local" });
     router.push("/");
   }
@@ -140,9 +140,46 @@ export function SettingsClient() {
         </form>
       </Panel>
 
+      {member.role === "admin" ? <SmsTemplateGuide /> : null}
+
       <Button variant="secondary" onClick={signOut}>
         <LogOut size={17} /> 로그아웃
       </Button>
     </div>
+  );
+}
+
+// notifier 에 등록할 권장 템플릿. {app_name} 은 notifier 앱 이름, 나머지는 모아이투표가 수신자마다 채운다.
+const RECOMMENDED_TEMPLATE = `[{app_name}] {title}
+{name}님 투표 링크: {url}
+링크가 걱정되면 vote.bluerdot.net 에서 코드 {code} 입력`;
+
+/**
+ * 총괄관리자용 안내 문자 템플릿 안내. 템플릿 본문은 notifier 관리 화면에서만 고친다
+ * (모아이투표가 notifier 관리자 키를 갖지 않게 하려고 — 키가 새면 모든 앱 템플릿·발송 설정이 바뀔 수 있다).
+ */
+function SmsTemplateGuide() {
+  return (
+    <Panel className="p-5">
+      <h2 className="text-base font-semibold text-slate-950">안내 문자 템플릿 (총괄관리자)</h2>
+      <p className="mt-2 break-keep text-sm leading-6 text-slate-600">
+        문자 본문은 발송 서버(notifier)의 템플릿으로 정해집니다. 투표 생성자는 제목만 고칠 수 있고, 본문은 아래
+        관리 화면에서 총괄관리자가 고칩니다.
+      </p>
+      <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs leading-5 text-slate-700">{RECOMMENDED_TEMPLATE}</pre>
+      <ul className="mt-3 grid gap-1 text-xs leading-5 text-slate-500">
+        <li><code>{"{title}"}</code> 문자 제목(생성자 편집, 기본 &ldquo;투표명 투표 안내&rdquo;)</li>
+        <li><code>{"{name}"}</code> 유권자 이름 · <code>{"{url}"}</code> 개인 링크 · <code>{"{code}"}</code> 투표 코드(ABC-234)</li>
+        <li>이모지는 쓸 수 없습니다. 한글 45자를 넘으면 장문(LMS)으로 나갑니다.</li>
+      </ul>
+      <a
+        href="https://notifier.bluerdot.net/admin"
+        target="_blank"
+        rel="noreferrer"
+        className="mt-4 inline-flex min-h-10 items-center rounded-lg border border-[var(--border)] px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+      >
+        notifier 관리 화면에서 템플릿 고치기
+      </a>
+    </Panel>
   );
 }

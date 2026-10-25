@@ -2,10 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getCreditPerVoter, voteCreationCost } from "../billing.ts";
 
-test("기본 단가는 10P/인이다", () => {
+test("기본 단가는 30P/인이다(장문 문자 기준)", () => {
   delete process.env.VOTE_CREDIT_PER_VOTER;
-  assert.equal(getCreditPerVoter(), 10);
-  assert.equal(voteCreationCost(100), 1000);
+  assert.equal(getCreditPerVoter(), 30);
+  assert.equal(voteCreationCost(100), 3000);
 });
 
 test("환경 변수로 단가를 조정할 수 있다", () => {
@@ -17,9 +17,9 @@ test("환경 변수로 단가를 조정할 수 있다", () => {
 
 test("잘못된 환경 변수 값은 기본값으로 폴백한다", () => {
   process.env.VOTE_CREDIT_PER_VOTER = "-1";
-  assert.equal(getCreditPerVoter(), 10);
+  assert.equal(getCreditPerVoter(), 30);
   process.env.VOTE_CREDIT_PER_VOTER = "abc";
-  assert.equal(getCreditPerVoter(), 10);
+  assert.equal(getCreditPerVoter(), 30);
   delete process.env.VOTE_CREDIT_PER_VOTER;
 });
 

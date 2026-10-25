@@ -32,6 +32,7 @@ import {
 } from "@/lib/utils";
 import { ballotTypeLabel } from "@/lib/ballot";
 import { electionNumber } from "@/lib/election-search";
+import { SMS_TITLE_MAX, defaultSmsTitle } from "@/lib/sms-title";
 import { formatPhone } from "@/lib/voters";
 
 type CodesResponse = {
@@ -267,6 +268,14 @@ function ManageElections() {
                     <span>시작 {formatDate(election.starts_at)}</span>
                     <span>마감 {formatDate(election.ends_at)}</span>
                   </div>
+                  {election.auth_mode === "sms_token" && election.status !== "closed" ? (
+                    <SmsTitleEditor
+                      election={election}
+                      onSaved={(updated) =>
+                        setElections((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+                      }
+                    />
+                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -370,5 +379,65 @@ function Skeleton() {
       <div className="mt-4 h-6 w-2/5 animate-pulse rounded bg-slate-200" />
       <div className="mt-3 h-4 w-full animate-pulse rounded bg-slate-100" />
     </Panel>
+  );
+}
+
+/** 안내 문자 제목 보기·고치기(생성자가 고칠 수 있는 유일한 문구). */
+function SmsTitleEditor({ election, onSaved }: { election: Election; onSaved: (election: Election) => void }) {
+  const current = election.sms_title?.trim() || "";
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(current);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const result = await fetchJson<{ election: Election }>(`/api/elections/${election.id}/sms-title`, {
+        method: "PATCH",
+        headers: await authHeaders(),
+        body: JSON.stringify({ smsTitle: value }),
+      });
+      onSaved(result.election);
+      setEditing(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "저장하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <p className="mt-2 text-sm text-slate-500">
+        문자 제목: <span className="text-slate-800">{current || defaultSmsTitle(election.name)}</span>{" "}
+        <button type="button" className="text-blue-700 underline underline-offset-2" onClick={() => setEditing(true)}>
+          고치기
+        </button>
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2 grid max-w-md gap-2">
+      <div className="flex gap-2">
+        <input
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          maxLength={SMS_TITLE_MAX}
+          placeholder={defaultSmsTitle(election.name)}
+          className="h-10 min-w-0 flex-1 rounded-lg border border-[var(--border)] px-3 text-sm outline-none focus:border-blue-500"
+        />
+        <Button onClick={save} disabled={saving} className="h-10">
+          {saving ? "저장 중" : "저장"}
+        </Button>
+        <Button variant="secondary" onClick={() => { setEditing(false); setValue(current); setError(""); }} className="h-10">
+          취소
+        </Button>
+      </div>
+      <p className="text-xs text-slate-500">다음에 보내는 문자부터 적용됩니다. 비우면 기본 제목.</p>
+      {error ? <Alert>{error}</Alert> : null}
+    </div>
   );
 }

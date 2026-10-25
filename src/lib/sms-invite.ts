@@ -7,6 +7,8 @@ import {
   type NotifierRecipient,
   type NotifierRecipientResult,
 } from "@/lib/simply-notifier";
+import { defaultSmsTitle } from "@/lib/sms-title";
+import { createVoterCode, formatVoterCode, getVoterCodePepper, hashVoterCode } from "@/lib/voter-code";
 import { createVoterToken, hashVoterToken } from "@/lib/voter-token";
 
 type Json = Database["app_open_vote"]["Tables"]["audit_logs"]["Row"]["details"];
@@ -69,6 +71,7 @@ export async function sendVoteInviteSms({
   baseUrl,
   dryRun = false,
   resendAll = false,
+  voterIds,
   actorId,
 }: {
   electionId: string;
@@ -76,6 +79,8 @@ export async function sendVoteInviteSms({
   dryRun?: boolean;
   /** true면 이미 발송된(invited_at 존재) 미투표 유권자에게도 새 링크를 재발송 */
   resendAll?: boolean;
+  /** 이 유권자들에게만 보낸다(유권자 본인 재발송). 지정하면 발송 이력과 상관없이 보낸다. */
+  voterIds?: string[];
   actorId: string;
 }): Promise<SmsInviteResult> {
   const config = getNotifierConfig();
@@ -86,6 +91,16 @@ export async function sendVoteInviteSms({
       error: "notifier_not_configured",
       message:
         "SMS 발송 서버가 설정되지 않았습니다. SIMPLY_NOTIFIER_APP_ID / SIMPLY_NOTIFIER_API_SECRET 환경 변수를 확인해주세요.",
+    };
+  }
+
+  const pepper = getVoterCodePepper();
+  if (!pepper) {
+    return {
+      ok: false,
+      status: 503,
+      error: "code_not_configured",
+      message: "투표 코드 설정(OPENVOTE_CODE_PEPPER)이 없습니다. 운영자에게 문의해주세요.",
     };
   }
 
@@ -102,7 +117,7 @@ export async function sendVoteInviteSms({
 
   const { data: election, error: electionError } = await supabase
     .from("elections")
-    .select("id, name, status")
+    .select("id, name, status, sms_title")
     .eq("id", electionId)
     .maybeSingle();
 
@@ -131,7 +146,9 @@ export async function sendVoteInviteSms({
     .eq("has_voted", false)
     .not("phone", "is", null);
 
-  if (!resendAll) {
+  if (voterIds) {
+    query = query.in("id", voterIds.length > 0 ? voterIds : ["00000000-0000-0000-0000-000000000000"]);
+  } else if (!resendAll) {
     query = query.is("invited_at", null);
   }
 
@@ -148,7 +165,8 @@ export async function sendVoteInviteSms({
 
   const targets = (voters ?? [])
     .filter((voter) => voter.phone)
-    .map((voter) => ({ voter, token: createVoterToken() }));
+    .map((voter) => ({ voter, token: createVoterToken(), code: createVoterCode() }));
+  const title = election.sms_title?.trim() || defaultSmsTitle(election.name);
 
   if (targets.length === 0) {
     return {
@@ -182,18 +200,32 @@ export async function sendVoteInviteSms({
   for (let offset = 0; offset < targets.length; offset += chunkSize) {
     const chunk = targets.slice(offset, offset + chunkSize);
     const hashes = new Map(chunk.map(({ voter, token }) => [voter.id, hashVoterToken(token)]));
-    let previous: Array<{ id: string; previous_hash: string | null }> = [];
+    let previous: Array<{ id: string; previous_hash: string | null; previous_code_hash: string | null }> = [];
 
     if (!dryRun) {
-      const { data: rotated, error: rotateError } = await supabase.rpc("rotate_voter_tokens", {
-        p_election_id: electionId,
-        p_tokens: chunk.map(({ voter }) => ({ id: voter.id, hash: hashes.get(voter.id) })) as unknown as Json,
-      });
+      // 코드 해시가 다른 유권자와 겹치면(10억분의 1 수준) 그 묶음 코드를 새로 뽑아 다시 시도한다.
+      let rotateError: { message: string; code?: string } | null = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const result = await supabase.rpc("rotate_voter_tokens", {
+          p_election_id: electionId,
+          p_tokens: chunk.map(({ voter, code }) => ({
+            id: voter.id,
+            hash: hashes.get(voter.id),
+            code_hash: hashVoterCode(code, pepper),
+          })) as unknown as Json,
+        });
+        rotateError = result.error;
+        if (!rotateError) {
+          previous = (result.data ?? []) as unknown as typeof previous;
+          break;
+        }
+        if (rotateError.code !== "23505") break;
+        for (const target of chunk) target.code = createVoterCode();
+      }
       if (rotateError) {
         summary.stopped = `투표 링크 토큰 갱신에 실패했습니다. (${rotateError.message})`;
         break;
       }
-      previous = (rotated ?? []) as unknown as typeof previous;
     }
 
     /** 문자가 가지 않은 수신자는 이전 링크를 되살린다(재발송 실패로 이미 받은 링크가 죽지 않게) */
@@ -206,16 +238,24 @@ export async function sendVoteInviteSms({
         p_election_id: electionId,
         p_tokens: previous
           .filter((item) => wanted.has(item.id))
-          .map((item) => ({ id: item.id, hash: hashes.get(item.id), previous_hash: item.previous_hash })) as unknown as Json,
+          .map((item) => ({
+            id: item.id,
+            hash: hashes.get(item.id),
+            previous_hash: item.previous_hash,
+            previous_code_hash: item.previous_code_hash,
+          })) as unknown as Json,
       });
     };
 
-    const recipients: NotifierRecipient[] = chunk.map(({ voter, token }) => ({
+    // 템플릿(notifier, 총괄관리자 편집)은 {title} {name} {url} {code} 를 쓸 수 있다. 안 쓰는 변수는 무시된다.
+    const recipients: NotifierRecipient[] = chunk.map(({ voter, token, code }) => ({
       phone: voter.phone as string,
       ref: voter.id,
       variables: {
+        title,
         name: voter.voter_name?.trim() || "유권자",
         url: `${baseUrl}/v/${token}`,
+        code: formatVoterCode(code),
       },
     }));
 
@@ -292,6 +332,7 @@ export async function sendVoteInviteSms({
         failed: summary.failed,
         skipped: summary.skipped,
         resend_all: resendAll,
+        targeted: voterIds ? voterIds.length : null,
         stopped: summary.stopped,
         actor: actorId,
         sent_at: new Date().toISOString(),

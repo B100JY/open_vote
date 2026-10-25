@@ -60,7 +60,7 @@ function OwnerCreditGrant() {
           <div>
             <h1 className="text-xl font-semibold text-slate-950">독립형 투표 포인트 지급</h1>
             <p className="mt-1 text-sm leading-6 text-slate-500">
-              모아이에서 직접 생성하는 선거의 개인 포인트 잔액을 관리합니다.
+              모아이투표에서 직접 생성하는 선거의 개인 포인트 잔액을 관리합니다.
               외부 앱 연동 키 및 노조링크 조합 지갑 관리는 잠정 중단했습니다.
             </p>
           </div>
