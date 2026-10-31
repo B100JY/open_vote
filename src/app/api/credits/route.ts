@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { requireVoteCreator } from "@/lib/supabase/auth";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import { getCreditPerVoter } from "@/lib/billing";
+import { getCreditPerVoter, getSmsPrices } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -39,9 +39,10 @@ export async function GET(request: Request) {
     return NextResponse.json({
       balance: account?.balance ?? 0,
       unitPrice: getCreditPerVoter(),
+      smsPrices: getSmsPrices(),
       isAdmin: auth.isAdmin,
       transactions: transactions ?? [],
-    });
+    },{headers:{"Cache-Control":"private, no-store"}});
   } catch (error) {
     return jsonError(
       error instanceof Error ? error.message : "포인트 정보를 불러오지 못했습니다.",

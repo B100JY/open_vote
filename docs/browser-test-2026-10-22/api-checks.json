@@ -1,0 +1,41 @@
+{
+  "checks": [
+    {
+      "name": "최소 미달",
+      "status": 400,
+      "passed": true,
+      "error": "choice_count"
+    },
+    {
+      "name": "최대 초과",
+      "status": 400,
+      "passed": true,
+      "error": "choice_count"
+    },
+    {
+      "name": "후보 중복",
+      "status": 400,
+      "passed": true,
+      "error": "duplicate_choice"
+    },
+    {
+      "name": "미등록 후보",
+      "status": 400,
+      "passed": true,
+      "error": "invalid_candidate"
+    },
+    {
+      "name": "기권 정상 접수",
+      "status": 200,
+      "passed": true,
+      "error": null
+    },
+    {
+      "name": "중복 투표 거부",
+      "status": 409,
+      "passed": true,
+      "error": "already_voted"
+    }
+  ],
+  "blankReceipt": "0acaafc53db6c42fb53c5f4a25b79b9f7d1642ec285f8d38746fd7248bd2cb7c"
+}

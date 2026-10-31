@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { normalizeElection } from "@/lib/utils";
+import { requireElectionView } from "@/lib/election-view-access";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +11,13 @@ export const dynamic = "force-dynamic";
  * 진행 중에 공개하면 원장이 늘어나는 순서로 누가 무엇을 찍었는지 추정할 수 있다.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await context.params;
+    const denied = await requireElectionView(request, id);
+    if (denied) return denied;
     const supabase = getServiceSupabase();
     await supabase.rpc("close_expired_elections");
 
@@ -43,7 +46,7 @@ export async function GET(
       return jsonError(ledger?.message ?? "공개 검증 데이터를 불러오지 못했습니다.", 500, error?.message);
     }
 
-    return NextResponse.json({ election: normalizeElection(election), ledger });
+    return NextResponse.json({ election: normalizeElection(election), ledger },{headers:{"Cache-Control":"private, no-store"}});
   } catch (error) {
     return jsonError(
       error instanceof Error ? error.message : "공개 검증 데이터를 불러오지 못했습니다.",

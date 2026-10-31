@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
-import { canManageElection, requireVoteCreator } from "@/lib/supabase/auth";
+import { canManageElection, getRequestMember, requireVoteCreator } from "@/lib/supabase/auth";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import type { ElectionStatus } from "@/lib/types";
 import { normalizeElection } from "@/lib/utils";
+import { canViewElection, canViewPrivateElection, grantElectionView, electionForViewer } from "@/lib/election-view-access";
 
 export const dynamic = "force-dynamic";
 
 const statuses = new Set<ElectionStatus>(["draft", "active", "paused", "closed"]);
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -26,7 +27,16 @@ export async function GET(
     if (error || !data) {
       return jsonError("선거 정보를 찾을 수 없습니다.", 404, error?.message);
     }
+    if (data.trashed_at || !["active", "closed"].includes(data.status)) {
+      const user = await getRequestMember(request);
+      if (!user || !["admin","creator"].includes(user.member.role) || !canManageElection({ user, isAdmin: user.member.role === "admin" },data.created_by)) {
+        return jsonError("선거 정보를 찾을 수 없습니다.",404);
+      }
+    }
 
+    if (!await canViewElection(request, data)) {
+      return NextResponse.json({restricted:true,election:{id:data.id,name:data.name,content_restricted:true}},{headers:{"Cache-Control":"private, no-store"}});
+    }
     // 집계 수치만 노출한다(익명성 유지: 표 내용/후보별 득표 비노출).
     //  - cast_count : 총 투표수(ballots) — 연동 앱의 "수정/삭제 가능" 판단에 사용.
     //  - voter_count: 명부 규모(voter_registry).
@@ -35,11 +45,14 @@ export async function GET(
       supabase.from("voter_registry").select("id", { count: "exact", head: true }).eq("election_id", id),
     ]);
 
-    return NextResponse.json({
-      election: normalizeElection(data),
+    const privateAccess = await canViewPrivateElection(request,data);
+    const response = NextResponse.json({
+      can_verify: data.description_public === true || privateAccess,
+      election: normalizeElection(await electionForViewer(request,data)),
       cast_count: castCount ?? 0,
       voter_count: voterCount ?? 0,
-    });
+    }, { headers: { "Cache-Control": "private, no-store" } });
+    return privateAccess ? grantElectionView(response, id) : response;
   } catch (error) {
     return jsonError(
       error instanceof Error ? error.message : "선거 정보를 불러오지 못했습니다.",

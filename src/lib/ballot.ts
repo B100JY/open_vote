@@ -16,11 +16,17 @@ import type { BallotRules, BallotType, Candidate } from "@/lib/types";
 export const BALLOT_TYPES: Array<{ id: BallotType; label: string; description: string }> = [
   { id: "single", label: "하나 선택", description: "여러 항목 중 하나만 고릅니다. 찬반·안건·1인 선출에 씁니다." },
   { id: "multi", label: "여러 개 선택 (연기명)", description: "정원만큼 여러 명을 고릅니다. 대의원처럼 여러 명을 뽑을 때 씁니다." },
-  { id: "approve", label: "항목별 찬성/반대", description: "후보마다 찬성·반대를 표시합니다. 단독 후보 신임이나 일괄 찬반에 씁니다." },
+  { id: "approve", label: "안건·후보 각각 찬성/반대", description: "각 이름이나 안건에 찬반을 표시합니다. 항목에는 후보 이름·안건명을 입력하세요." },
   { id: "rank", label: "순위 투표", description: "선호하는 순서대로 순위를 매깁니다. 1순위 득표와 순위 점수로 집계합니다." },
 ];
 
 export const BLANK_SELECTION = "BLANK";
+
+/** 찬반 응답을 안건으로 다시 묻는 생성 화면의 실수를 찾는다. 기존 기표 규칙은 바꾸지 않는다. */
+export function hasApprovalAnswerOptions(candidates: Pick<Candidate,"name">[]) {
+  const answers = new Set(["찬성","반대","보류","예","아니오"]);
+  return candidates.length >= 2 && candidates.every(candidate => answers.has(candidate.name.trim()));
+}
 
 /** 후보 식별자 규칙 — 정규 문자열 구분자(, > :)와 겹치지 않게 */
 export const CANDIDATE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;

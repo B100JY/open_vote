@@ -49,6 +49,10 @@ export function AuthClient({ electionId }: { electionId: string }) {
         },
       );
       setStatus(data);
+      if (data.registered) {
+        const detail = await fetchJson<{election:Election}>(`/api/elections/${electionId}`,{headers:{Authorization:`Bearer ${accessToken}`}});
+        setElection(detail.election);
+      }
       if (data.voter?.email) {
         setEmail(data.voter.email);
       }

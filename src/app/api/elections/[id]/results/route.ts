@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { jsonError } from "@/lib/api-response";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import { normalizeElection } from "@/lib/utils";
+import { requireElectionView, electionForViewer } from "@/lib/election-view-access";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +11,13 @@ export const dynamic = "force-dynamic";
  * 관리자에게도 보이지 않는다(DB 함수 get_election_results 가 한 번 더 막는다).
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await context.params;
+    const denied = await requireElectionView(request, id);
+    if (denied) return denied;
     const supabase = getServiceSupabase();
     await supabase.rpc("close_expired_elections");
 
@@ -30,7 +33,7 @@ export async function GET(
 
     if (election.status !== "closed") {
       return NextResponse.json({
-        election: normalizeElection(election),
+        election: normalizeElection(await electionForViewer(request,election)),
         results: null,
         message: "결과는 투표가 종료된 뒤 공개됩니다.",
       });
@@ -43,7 +46,7 @@ export async function GET(
       return jsonError(results?.message ?? "투표 결과를 불러오지 못했습니다.", 500, error?.message);
     }
 
-    return NextResponse.json({ election: normalizeElection(election), results });
+    return NextResponse.json({ election: normalizeElection(await electionForViewer(request,election)), results },{headers:{"Cache-Control":"private, no-store"}});
   } catch (error) {
     return jsonError(
       error instanceof Error ? error.message : "투표 결과를 불러오지 못했습니다.",

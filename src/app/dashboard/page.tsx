@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, RefreshCw, Users, Vote } from "lucide-react";
+import { Activity, RefreshCw, Vote } from "lucide-react";
 import { Alert, Badge, Button, EmptyState, Panel, ProgressBar } from "@/components/ui";
 import { fetchJson } from "@/lib/client-fetch";
+import { CodeEntry } from "@/components/code-entry";
+import { pickElectionId } from "@/lib/election-search";
 import type { Election, ElectionStats } from "@/lib/types";
 import {
   formatDate,
@@ -29,8 +31,9 @@ export default function DashboardPage() {
       "/api/elections?status=active",
     );
     setElections(data.elections);
-    setSelectedElectionId((current) => current || data.elections[0]?.id || "");
-    return data.elections[0]?.id || "";
+    const first = pickElectionId(data.elections, window.location.search);
+    setSelectedElectionId((current) => current || first);
+    return first;
   }, []);
 
   const loadStats = useCallback(async (id: string) => {
@@ -83,11 +86,11 @@ export default function DashboardPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="page-heading flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">투표 진행률</h1>
           <p className="mt-1 text-sm text-slate-500">
-            서버 집계 기준으로 주기적으로 업데이트됩니다.
+            선거별 참여율과 투표 현황을 확인하세요. 15초마다 새로운 집계를 불러옵니다.
           </p>
         </div>
         <Button variant="secondary" onClick={refresh} disabled={loading}>
@@ -97,6 +100,7 @@ export default function DashboardPage() {
       </div>
 
       {error ? <Alert>{error}</Alert> : null}
+      {error.includes("투표 코드") ? <Panel className="p-5"><CodeEntry compact /></Panel> : null}
 
       {loading ? (
         <Panel className="p-6">
@@ -125,6 +129,7 @@ export default function DashboardPage() {
                 </p>
               </div>
               <select
+                aria-label="진행 현황을 확인할 선거"
                 className="h-11 rounded-lg border border-[var(--border)] bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                 value={selectedElectionId}
                 onChange={(event) => setSelectedElectionId(event.target.value)}
@@ -160,58 +165,20 @@ export default function DashboardPage() {
             </div>
           </Panel>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            <InfoCard
-              icon={<Vote size={24} aria-hidden="true" />}
-              label="총 투표수"
-              value={stats?.ballots.total ?? 0}
-            />
-            <InfoCard
-              icon={<Users size={24} aria-hidden="true" />}
-              label="등록 유권자"
-              value={total}
-            />
-            <InfoCard
-              icon={<Activity size={24} aria-hidden="true" />}
-              label="사용됨"
-              value={used}
-            />
-          </div>
+          <p className="flex items-center gap-2 text-xs leading-6 text-slate-500">
+            <Activity size={14} aria-hidden="true" />
+            총 접수 {stats?.ballots.total ?? 0}표 · 투표 결과는 선거가 종료된 후 공개됩니다.
+          </p>
         </>
       )}
     </div>
   );
 }
-
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-slate-50 p-4 text-center">
       <div className="text-xl font-semibold text-slate-950">{value}</div>
       <div className="mt-1 text-xs text-slate-500">{label}</div>
     </div>
-  );
-}
-
-function InfoCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-}) {
-  return (
-    <Panel className="p-5">
-      <div className="flex items-center gap-3">
-        <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
-          {icon}
-        </span>
-        <div>
-          <div className="text-2xl font-semibold text-slate-950">{value}</div>
-          <div className="text-sm text-slate-500">{label}</div>
-        </div>
-      </div>
-    </Panel>
   );
 }

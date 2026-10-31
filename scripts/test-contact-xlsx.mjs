@@ -1,0 +1,10 @@
+import readExcelFile from "read-excel-file/node";
+import assert from "node:assert/strict";
+import {prepareContactImport,suggestContactColumns} from "../src/lib/contact-import.ts";
+const sheets=await readExcelFile(process.argv[2]);
+assert.equal(sheets.length,2);
+const preview=prepareContactImport(sheets[0].data,suggestContactColumns(sheets[0].data[0]));
+assert.equal(preview.errors.length,0);assert.equal(preview.contacts.length,2);assert.equal(preview.duplicates,1);assert.equal(preview.restored,1);
+assert.deepEqual(preview.contacts[0].groupNames,["엑셀검증-A","엑셀검증-B","엑셀검증-C"]);
+assert.equal(prepareContactImport(sheets[1].data,{phone:0,name:1,group:null,header:false}).contacts.length,1);
+console.log("PASS real XLSX parser: multiple sheets / inline strings / numeric leading zero / mapping / duplicate group union / no header");

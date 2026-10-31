@@ -68,5 +68,13 @@ export async function verifyLedger(ballots: PublicLedgerBallot[], ledgerHash: st
 }
 
 export function normalizeReceiptInput(value: string) {
-  return value.trim().toLowerCase().replace(/^0x/, "");
+  const input = value.trim().toLowerCase();
+  // 한 줄 입력창에 붙이면 줄바꿈이 제거되므로 필드 앞의 줄 경계에 의존하지 않는다.
+  const copiedHashes = [...input.matchAll(/receipt_hash\s*=\s*(?:0x)?([a-f0-9]{64})(?![a-f0-9])/g)];
+  if (copiedHashes.length > 0) {
+    const hashes = new Set(copiedHashes.map((match) => match[1]));
+    return hashes.size === 1 ? copiedHashes[0][1] : "";
+  }
+  const hash = input.replace(/^0x/, "");
+  return /^[a-f0-9]{64}$/.test(hash) ? hash : "";
 }

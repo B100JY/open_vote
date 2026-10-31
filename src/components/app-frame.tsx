@@ -1,64 +1,37 @@
 import Link from "next/link";
-import {
-  BarChart3,
-  ClipboardList,
-  Coins,
-  Home,
-  LayoutDashboard,
-  ShieldCheck,
-  Vote,
-} from "lucide-react";
-
-const navItems = [
-  { href: "/", label: "홈", icon: Home },
-  { href: "/vote", label: "투표", icon: Vote },
-  { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
-  { href: "/results", label: "결과", icon: BarChart3 },
-  { href: "/verify", label: "검증", icon: ShieldCheck },
-  { href: "/admin", label: "관리", icon: ClipboardList },
-  { href: "/admin/credits", label: "포인트", icon: Coins },
-];
+import { ArrowUpRight } from "lucide-react";
+import { MoaiIcon } from "@/components/moai-icon";
+import { SiteNav } from "@/components/site-nav";
 
 export function AppFrame({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <header className="sticky top-0 z-20 border-b border-[var(--border)] bg-white/92 backdrop-blur">
-        <div className="mx-auto flex min-h-16 w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white">
-              <ShieldCheck size={22} aria-hidden="true" />
-            </span>
-            <span>
-              <span className="block text-base font-semibold leading-5">
-                다모음
-              </span>
-              <span className="block text-xs text-slate-500">
-                노동조합용 오픈소스 투표 시스템
-              </span>
-            </span>
+    <div className="flex min-h-screen flex-col bg-[var(--background)] text-[var(--foreground)]">
+      <a href="#main-content" className="skip-link">본문으로 바로가기</a>
+      <header className="site-header">
+        <div className="site-container header-inner">
+          <Link href="/" className="brand" aria-label="모아이투표 홈">
+            <span className="brand-mark"><MoaiIcon width={34} height={34} /></span>
+            <span className="text-xl font-bold tracking-[-0.07em]">모아이투표</span>
           </Link>
-
-          <nav className="flex gap-1 overflow-x-auto pb-1 lg:pb-0">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-                >
-                  <Icon size={17} aria-hidden="true" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <SiteNav />
         </div>
       </header>
-
-      <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      <main id="main-content" tabIndex={-1} className="site-container site-main flex-1">
         {children}
       </main>
+      <footer className="site-footer">
+        <div className="site-container flex flex-col gap-5 py-7 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Link href="/" className="font-bold tracking-tight text-slate-800">모아이투표</Link>
+            <p className="mt-1.5 text-sm leading-6 text-slate-500">각자의 선택이 모여, 우리의 결정으로.</p>
+          </div>
+          <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium text-slate-600">
+            <Link href="/trust" className="inline-flex items-center gap-1">보안과 투명성 <ArrowUpRight size={13} aria-hidden="true" /></Link>
+            <Link href="/verify">투표 검증</Link>
+            <Link href="/privacy">개인정보처리방침</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

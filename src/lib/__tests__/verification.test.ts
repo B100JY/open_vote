@@ -1,8 +1,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { computeLedgerHash, createReceiptHash, verifyLedger } from "../verification.ts";
+import { computeLedgerHash, createReceiptHash, normalizeReceiptInput, verifyLedger } from "../verification.ts";
+import { formatReceiptForCopy } from "../vote-receipt.ts";
 
 const ELECTION_ID = "11111111-1111-1111-1111-111111111111";
+
+test("완료 화면에서 복사한 영수증을 그대로 검색할 수 있다(줄바꿈 제거 포함)", () => {
+  const receipt = { electionId: ELECTION_ID, electionName: "시험", receiptHash: "a".repeat(64), salt: "b".repeat(64) };
+  const copied = formatReceiptForCopy(receipt);
+  assert.equal(normalizeReceiptInput(copied), receipt.receiptHash);
+  assert.equal(normalizeReceiptInput(copied.replaceAll("\n", "")), receipt.receiptHash);
+  assert.equal(normalizeReceiptInput(copied.replaceAll("\n", "\r\n")), receipt.receiptHash);
+});
+
+test("해시만 입력하거나 대문자·0x 접두사를 붙인 검색도 지원한다", () => {
+  assert.equal(normalizeReceiptInput(` 0x${"A".repeat(64)} `), "a".repeat(64));
+  assert.equal(normalizeReceiptInput("a".repeat(64)), "a".repeat(64));
+});
+
+test("잘못된 형식과 서로 다른 영수증을 함께 붙인 입력은 검색하지 않는다", () => {
+  for (const value of ["", "잘못된 값", "a".repeat(63), "a".repeat(65), `receipt_hash=${"a".repeat(65)}`, `salt=${"a".repeat(64)}`]) {
+    assert.equal(normalizeReceiptInput(value), "");
+  }
+  assert.equal(normalizeReceiptInput(`receipt_hash=${"a".repeat(64)}\nreceipt_hash=${"b".repeat(64)}`), "");
+});
 
 // DB get_public_ballot_ledger 와 같은 식으로 로컬 Postgres 에서 계산한 값(2026-10-10).
 // 이 값이 바뀌면 브라우저 검증과 DB 공개 원장이 서로 어긋난 것이다.

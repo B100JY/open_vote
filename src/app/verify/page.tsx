@@ -5,9 +5,14 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Info, Lock, RefreshCw, Search, ShieldCheck, XCircle } from "lucide-react";
 import { Alert, Badge, Button, EmptyState, Field, Panel } from "@/components/ui";
 import { fetchJson } from "@/lib/client-fetch";
+import { CodeEntry } from "@/components/code-entry";
+import { pickElectionId } from "@/lib/election-search";
 import type { Election, PublicBallotLedger } from "@/lib/types";
 import { describeSelection } from "@/lib/ballot";
 import { normalizeReceiptInput, verifyLedger } from "@/lib/verification";
+import { ReceiptAuditPanel } from "@/components/receipt-audit-panel";
+import type { AuditBundle } from "@/lib/native-audit";
+import type { SavedReceipt } from "@/lib/vote-receipt";
 
 type LedgerResponse = {
   election: Election;
@@ -15,17 +20,18 @@ type LedgerResponse = {
   message?: string;
 };
 
-export default function VerifyPage() {
-  const [elections, setElections] = useState<Election[]>([]);
-  const [selectedElectionId, setSelectedElectionId] = useState("");
-  const [ledger, setLedger] = useState<PublicBallotLedger | null>(null);
-  const [ledgerElection, setLedgerElection] = useState<Election | null>(null);
-  const [receiptQuery, setReceiptQuery] = useState("");
+/** 모의 데이터 주입 시에도 실제 검증 화면과 SHA-256 원장 검사 함수를 그대로 실행한다. */
+export default function VerifyPage({ simulation, initialReceipt = "", simulatedBundle, simulatedReceipt }: { simulation?: LedgerResponse; initialReceipt?: string; simulatedBundle?: AuditBundle; simulatedReceipt?: SavedReceipt }) {
+  const [elections, setElections] = useState<Election[]>(simulation ? [simulation.election] : []);
+  const [selectedElectionId, setSelectedElectionId] = useState(simulation?.election.id ?? "");
+  const [ledger, setLedger] = useState<PublicBallotLedger | null>(simulation?.ledger ?? null);
+  const [ledgerElection, setLedgerElection] = useState<Election | null>(simulation?.election ?? null);
+  const [receiptQuery, setReceiptQuery] = useState(initialReceipt);
   const [chainStatus, setChainStatus] = useState<{
     valid: boolean;
     reason: string | null;
   } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!simulation);
   const [error, setError] = useState("");
 
   const receipt = normalizeReceiptInput(receiptQuery);
@@ -38,15 +44,23 @@ export default function VerifyPage() {
   }, [ledger, receipt]);
 
   async function loadElections() {
+    if (simulation) return simulation.election.id;
     const data = await fetchJson<{ elections: Election[] }>(
       "/api/elections?visibility=public",
     );
     setElections(data.elections);
-    setSelectedElectionId((current) => current || data.elections[0]?.id || "");
-    return currentOrFirst(selectedElectionId, data.elections);
+    const first = pickElectionId(data.elections, window.location.search);
+    setSelectedElectionId((current) => current || first);
+    return selectedElectionId || first;
   }
 
   async function loadLedger(id: string) {
+    if (simulation) {
+      setLedgerElection(simulation.election);
+      setLedger(simulation.ledger);
+      setChainStatus(simulation.ledger ? await verifyLedger(simulation.ledger.ballots, simulation.ledger.ledger_hash) : null);
+      return;
+    }
     if (!id) {
       setLedger(null);
       return;
@@ -59,6 +73,7 @@ export default function VerifyPage() {
   }
 
   async function refresh() {
+    if (simulation) { await loadLedger(simulation.election.id); return; }
     setLoading(true);
     setError("");
     try {
@@ -72,7 +87,7 @@ export default function VerifyPage() {
   }
 
   useEffect(() => {
-    refresh();
+    if (!simulation) void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -84,6 +99,7 @@ export default function VerifyPage() {
     loadLedger(selectedElectionId).catch((caught) => {
       setError(caught instanceof Error ? caught.message : "검증 데이터를 불러오지 못했습니다.");
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedElectionId]);
 
   return (
@@ -92,7 +108,7 @@ export default function VerifyPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">공개 투표 검증</h1>
           <p className="mt-1 text-sm text-slate-500">
-            투표 종료 후 공개 원장에서 내 영수증을 찾고, 원장 해시를 브라우저에서 다시 계산해 확인합니다.
+            {simulation ? "모의 공개 원장을 실제 검증 함수로 검사합니다. 운영 원장이나 서명 검증을 대신하지 않습니다." : "투표 종료 후 공개 원장에서 내 영수증을 찾고, 원장 해시를 브라우저에서 다시 계산해 확인합니다."}
           </p>
         </div>
         <div className="flex gap-2">
@@ -111,6 +127,7 @@ export default function VerifyPage() {
       </div>
 
       {error ? <Alert>{error}</Alert> : null}
+      {error.includes("투표 코드") ? <Panel className="p-5"><CodeEntry compact /></Panel> : null}
 
       {loading ? (
         <Panel className="p-6">
@@ -131,7 +148,8 @@ export default function VerifyPage() {
                 label="영수증 해시 검색"
                 value={receiptQuery}
                 onChange={(event) => setReceiptQuery(event.target.value)}
-                placeholder="투표 완료 화면에서 받은 64자리 해시"
+                placeholder="64자리 해시 또는 복사한 영수증 전체"
+                hint="투표 완료 화면에서 복사한 영수증 전체를 붙여넣어도 됩니다."
               />
               <label className="grid gap-2">
                 <span className="text-sm font-medium text-slate-700">선거</span>
@@ -158,6 +176,7 @@ export default function VerifyPage() {
             />
           ) : (
             <>
+              {ledgerElection ? <ReceiptAuditPanel key={`${ledgerElection.id}:${ledger.ledger_hash}`} election={ledgerElection} ledger={ledger} simulatedBundle={simulatedBundle} simulatedReceipt={simulatedReceipt} /> : null}
               <div className="grid gap-3 md:grid-cols-3">
                 <StatusCard
                   label="원장 투표수"
@@ -183,8 +202,10 @@ export default function VerifyPage() {
                 />
               </div>
 
-              {receipt ? (
-                matchedBallot ? (
+              {receiptQuery.trim() ? (
+                !receipt ? (
+                  <Alert>영수증 형식을 확인해주세요. 64자리 영수증 해시 또는 완료 화면에서 복사한 영수증 전체를 입력해주세요.</Alert>
+                ) : matchedBallot ? (
                   <Alert tone="success">
                     영수증을 찾았습니다. 원장에 기록된 선택은 &ldquo;
                     {describeSelection(matchedBallot.selection, ledgerElection?.candidates ?? [])}
@@ -231,10 +252,6 @@ export default function VerifyPage() {
       )}
     </div>
   );
-}
-
-function currentOrFirst(current: string, elections: Election[]) {
-  return current || elections[0]?.id || "";
 }
 
 function StatusCard({

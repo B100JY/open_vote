@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PendingAuditRecovery } from "@/components/pending-audit-recovery";
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { BallotSheet } from "@/components/ballot-sheet";
@@ -23,10 +24,6 @@ export function BallotClient({ electionId }: { electionId: string }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchJson<{ election: Election }>(`/api/elections/${electionId}`)
-      .then((data) => setElection(data.election))
-      .catch(() => setElection(null));
-
     const supabase = getBrowserSupabase();
     if (!supabase) {
       setChecking(false);
@@ -52,6 +49,10 @@ export function BallotClient({ electionId }: { electionId: string }) {
         },
       );
       setStatus(voterStatus);
+      if (voterStatus.registered) {
+        const detail = await fetchJson<{election:Election}>(`/api/elections/${electionId}`,{headers:{Authorization:`Bearer ${token}`}});
+        setElection(detail.election);
+      }
     }
 
     loadAuth()
@@ -114,6 +115,7 @@ export function BallotClient({ electionId }: { electionId: string }) {
             인증 상태 보기
           </Link>
         </Panel>
+        {status.hasVoted ? <PendingAuditRecovery electionId={electionId} /> : null}
       </div>
     );
   }
@@ -151,6 +153,7 @@ export function BallotClient({ electionId }: { electionId: string }) {
   return (
     <BallotSheet
       election={election}
+      credential={{ body: { electionId }, headers: { Authorization: `Bearer ${accessToken}` } }}
       notice="이메일 로그인으로 본인 확인되었습니다."
       submit={(selection, receiptHash) =>
         fetchJson<{ success: true; receiptHash: string }>("/api/vote", {

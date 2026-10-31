@@ -40,3 +40,8 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# local agent tools, logs, and scratch databases
+/.mcp.json
+/.codex-logs/
+/.claude/

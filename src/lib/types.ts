@@ -16,12 +16,25 @@ export type Candidate = {
 };
 
 export type Election = BallotRules & {
+  organization_name?: string;
+  description_public?: boolean;
+  content_restricted?: boolean;
+  home_closed_days?: number;
+  closed_at?: string | null;
+  trashed_at?: string | null;
+  purge_after?: string | null;
+  objection_count?: number;
+  audit_version?: number;
   id: string;
   name: string;
   description: string | null;
   candidates: Candidate[];
   total_voter_codes: number;
   status: ElectionStatus;
+  /** sms_token(문자 개인 링크) · email_link 등. 화면에서 투표 안내를 고르는 데만 쓴다. */
+  auth_mode?: string | null;
+  /** 안내 문자 제목(비우면 "<선거명> 투표 안내") */
+  sms_title?: string | null;
   starts_at: string | null;
   ends_at: string | null;
   created_at: string;
@@ -38,6 +51,8 @@ export type VoterRegistry = {
   has_voted: boolean;
   invited_at: string | null;
   created_at: string;
+  /** 관리 화면 개별 재발송 횟수(최대 5) */
+  admin_resend_count?: number;
 };
 
 export type CreditTransaction = {
@@ -51,6 +66,7 @@ export type CreditTransaction = {
 };
 
 export type CreditsSummary = {
+  smsPrices?: { standard: number; compact: number };
   balance: number;
   unitPrice: number;
   isAdmin: boolean;
@@ -58,6 +74,9 @@ export type CreditsSummary = {
 };
 
 export type SmsInviteResponse = {
+  cost?: number;
+  refunded?: number;
+  uncertain?: boolean;
   requested: number;
   sent: number;
   failed: number;

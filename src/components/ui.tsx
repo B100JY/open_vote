@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes } from "react";
+import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes } from "react";
 import { cx } from "@/lib/utils";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -15,7 +15,7 @@ export function Button({
     <button
       type={type}
       className={cx(
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-55",
+        "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-55",
         variant === "primary" &&
           "bg-blue-600 text-white hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
         variant === "secondary" &&
@@ -39,14 +39,16 @@ export function Field({
   label: string;
   hint?: string;
 }) {
+  const hintId = useId();
   return (
     <label className={cx("grid gap-2", className)}>
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <input
-        className="h-12 rounded-lg border border-[var(--border)] bg-white px-3 text-base outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        className="h-12 rounded-xl border border-[var(--border)] bg-white px-4 text-base outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        aria-describedby={hint ? hintId : undefined}
         {...props}
       />
-      {hint ? <span className="text-xs text-slate-500">{hint}</span> : null}
+      {hint ? <span id={hintId} className="text-xs leading-5 text-slate-500">{hint}</span> : null}
     </label>
   );
 }
@@ -60,7 +62,7 @@ export function Textarea({
     <label className={cx("grid gap-2", className)}>
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <textarea
-        className="min-h-28 rounded-lg border border-[var(--border)] bg-white px-3 py-3 text-base outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+        className="min-h-28 rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-base outline-none transition placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
         {...props}
       />
     </label>
@@ -77,7 +79,7 @@ export function Panel({
   return (
     <section
       className={cx(
-        "rounded-lg border border-[var(--border)] bg-white shadow-sm shadow-slate-200/50",
+        "ui-panel",
         className,
       )}
     >
@@ -96,7 +98,7 @@ export function Alert({
   return (
     <div
       className={cx(
-        "rounded-lg border px-4 py-3 text-sm",
+        "rounded-xl border px-4 py-3 text-sm leading-6",
         tone === "danger" && "border-red-200 bg-red-50 text-red-800",
         tone === "info" && "border-blue-200 bg-blue-50 text-blue-800",
         tone === "success" &&
@@ -119,7 +121,7 @@ export function Badge({
   return (
     <span
       className={cx(
-        "inline-flex h-7 items-center rounded-lg border px-2.5 text-xs font-semibold",
+        "inline-flex min-h-6 items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
         className,
       )}
     >
@@ -138,11 +140,11 @@ export function EmptyState({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-72 flex-col items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-white px-6 py-10 text-center">
-      <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+    <div className="ui-empty flex flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-slate-50 text-slate-400">
         {icon}
       </div>
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <h2 className="text-base font-medium text-slate-700">{title}</h2>
       <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
         {description}
       </p>
@@ -154,9 +156,9 @@ export function ProgressBar({ value }: { value: number }) {
   const clamped = Math.max(0, Math.min(100, value));
 
   return (
-    <div className="h-3 overflow-hidden rounded-lg bg-slate-200">
+    <div role="progressbar" aria-label="투표 비율" aria-valuemin={0} aria-valuemax={100} aria-valuenow={clamped} className="h-2 overflow-hidden rounded-full bg-slate-100">
       <div
-        className="h-full rounded-lg bg-blue-600 transition-all"
+        className="h-full rounded-full bg-blue-600 transition-all"
         style={{ width: `${clamped}%` }}
       />
     </div>

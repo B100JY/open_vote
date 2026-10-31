@@ -2,182 +2,95 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  ArrowRight,
-  BarChart3,
-  ClipboardList,
-  LayoutDashboard,
-  ShieldCheck,
-  Vote,
-} from "lucide-react";
-import { Badge, EmptyState, Panel } from "@/components/ui";
+import { ArrowRight, ClipboardList, LockKeyhole, Search, ShieldCheck, Vote, X } from "lucide-react";
+import { Alert, Badge, Panel, ProgressBar } from "@/components/ui";
+import { CodeEntry } from "@/components/code-entry";
 import { fetchJson } from "@/lib/client-fetch";
-import type { Election } from "@/lib/types";
-import { formatDateShort, statusLabel, statusTone } from "@/lib/utils";
+import { electionNumber, matchesElectionQuery } from "@/lib/election-search";
+import { MoaiIcon } from "@/components/moai-icon";
+import { publicPeriodDate, type PublicElectionSummary } from "@/lib/public-election-summary";
 
 export default function HomePage() {
-  const [elections, setElections] = useState<Election[]>([]);
+  const [elections, setElections] = useState<PublicElectionSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
-    fetchJson<{ elections: Election[] }>("/api/elections?visibility=public")
-      .then((data) => setElections(data.elections))
-      .catch(() => setElections([]))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    fetchJson<{ elections: PublicElectionSummary[] }>("/api/elections/public-summary")
+      .then((data) => { if (!cancelled) setElections(data.elections); })
+      .catch(() => { if (!cancelled) setError("공개 투표를 불러오지 못했습니다. 잠시 후 다시 방문해주세요."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
-  const activeCount = elections.filter((election) => election.status === "active").length;
-  const closedCount = elections.filter((election) => election.status === "closed").length;
+  const query = search.trim();
+  const filtered = elections.filter((election) => matchesElectionQuery(election, query));
 
   return (
-    <div className="grid gap-6">
-      <section className="overflow-hidden rounded-lg border border-[var(--border)] bg-white">
-        <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr] lg:p-8">
-          <div className="flex flex-col justify-center">
-            <Badge className="mb-4 w-fit border-blue-200 bg-blue-50 text-blue-700">
-              익명성과 투명성을 분리한 투표 시스템
-            </Badge>
-            <h1 className="max-w-2xl text-3xl font-semibold leading-tight text-slate-950 sm:text-4xl">
-              다모음
-            </h1>
-            <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600">
-              로그인 신원과 기표 데이터를 분리해 무기명 투표를 유지하면서, 진행률과
-              결과 집계를 공개할 수 있는 투표 앱입니다.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/vote"
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
-              >
-                <Vote size={18} aria-hidden="true" />
-                투표하기
-              </Link>
-              <Link
-                href="/trust"
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-              >
-                <ShieldCheck size={18} aria-hidden="true" />
-                보안 기술 확인
-              </Link>
-              <Link
-                href="/admin"
-                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-              >
-                <ClipboardList size={18} aria-hidden="true" />
-                투표 생성
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Metric label="진행 중" value={loading ? "-" : activeCount} />
-            <Metric label="종료" value={loading ? "-" : closedCount} />
-            <LinkMetric
-              href="/dashboard"
-              label="진행률"
-              icon={<LayoutDashboard size={22} aria-hidden="true" />}
-            />
-            <LinkMetric
-              href="/results"
-              label="결과"
-              icon={<BarChart3 size={22} aria-hidden="true" />}
-            />
-          </div>
+    <div className="compact-home">
+      <section className="home-intro" aria-labelledby="hero-title">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-blue-50 text-blue-600"><MoaiIcon width={60} height={60} /></div>
+        <h1 id="hero-title">모두의 선택을 모으는<br /><span>모아이투표</span></h1>
+        <p className="intro-description">쉽게 참여하고, 투명하게 확인하는 투표 서비스.</p>
+        <div className="vote-entry">
+          <CodeEntry title="투표 코드로 참여하기" />
+          <p className="mt-2 text-sm leading-6 text-slate-500">문자로 받은 6자리 코드를 입력해주세요.</p>
+        </div>
+        <div className="intro-links">
+          <Link href="/trust"><ShieldCheck size={15} aria-hidden="true" /> 이용 안내</Link>
+          <span aria-hidden="true" className="h-3 w-px bg-slate-200" />
+          <Link href="/admin"><ClipboardList size={15} aria-hidden="true" /> 투표 생성</Link>
         </div>
       </section>
 
-      <section className="grid gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold text-slate-950">공개 선거</h2>
-          <Link
-            href="/vote"
-            className="inline-flex items-center gap-1 text-sm font-semibold text-blue-700"
-          >
-            전체 보기
-            <ArrowRight size={16} aria-hidden="true" />
-          </Link>
-        </div>
-
-        {loading ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            <SkeletonCard />
-            <SkeletonCard />
+      <section className="public-votes" aria-labelledby="public-elections">
+        <div className="public-votes-heading">
+          <h2 id="public-elections" className="section-title">공개 투표</h2>
+          <div className="vote-search" role="search" aria-label="공개 투표 검색">
+            <Search size={16} className="shrink-0 text-slate-400" aria-hidden="true" />
+            <label htmlFor="vote-search" className="sr-only">공개 투표 검색</label>
+            <input id="vote-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="투표 번호나 이름 검색" className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
+            {search ? <button type="button" aria-label="검색어 지우기" onClick={() => setSearch("")} className="grid h-7 w-7 shrink-0 place-items-center rounded text-slate-500 hover:bg-slate-100"><X size={14} aria-hidden="true" /></button> : null}
           </div>
-        ) : elections.length === 0 ? (
-          <EmptyState
-            icon={<Vote size={28} aria-hidden="true" />}
-            title="공개된 선거가 없습니다"
-            description="진행 중이거나 종료된 선거가 있으면 이곳에 표시됩니다."
-          />
+        </div>
+        {error ? <Alert>{error}</Alert> : loading ? (
+          <div className="grid gap-3 sm:grid-cols-2" role="status" aria-label="공개 투표 불러오는 중">
+            {[0, 1].map((key) => <Panel key={key} className="p-5"><div className="h-5 w-16 animate-pulse rounded bg-slate-100" /><div className="mt-4 h-5 w-2/3 animate-pulse rounded bg-slate-100" /></Panel>)}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div role="status" className="compact-empty">
+            <Vote size={24} strokeWidth={1.5} className="mb-3 text-slate-400" aria-hidden="true" />
+            <p className="text-sm font-medium text-slate-600">{query ? "검색 결과가 없습니다" : "현재 표시할 공개 투표가 없습니다"}</p>
+            {query ? <p className="mt-1 text-sm text-slate-500">다른 투표명으로 검색해주세요.</p> : null}
+          </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {elections.slice(0, 4).map((election) => (
-              <Link key={election.id} href={`/vote/${election.id}/auth`}>
-                <Panel className="h-full p-5 transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <Badge className={statusTone(election.status)}>
-                        {statusLabel(election.status)}
-                      </Badge>
-                      <h3 className="mt-3 text-lg font-semibold text-slate-950">
-                        {election.name}
-                      </h3>
-                    </div>
-                    <ArrowRight className="text-slate-400" size={20} aria-hidden="true" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {filtered.map((election) => (
+              <Link key={election.id} href={`/elections/${election.id}`} className="election-card">
+                <div className="flex items-center justify-between gap-3"><Badge className={election.status === "closed" ? "border-slate-200 bg-slate-100 text-slate-600" : election.status === "scheduled" ? "border-blue-100 bg-blue-50 text-blue-700" : "border-emerald-100 bg-emerald-50 text-emerald-700"}>{election.status === "closed" ? "종료" : election.status === "scheduled" ? "시작 예정" : "진행 중"}</Badge><ArrowRight size={16} className="text-slate-400" aria-hidden="true" /></div>
+                {election.organization_name ? <p className="mt-3 text-xs font-medium text-blue-700">{election.organization_name}</p> : null}
+                <h3 className="mt-3 text-base font-semibold text-slate-800">{election.name}</h3>
+                <dl className="mt-3 grid gap-2 text-sm text-slate-600">
+                  <div className="flex gap-3"><dt className="w-7 shrink-0 text-slate-400">기간</dt><dd className="flex flex-wrap gap-x-1"><span>{publicPeriodDate(election.starts_at)} ~</span><span>{publicPeriodDate(election.ends_at)}</span></dd></div>
+                  <div className="flex gap-3"><dt className="w-7 shrink-0 text-slate-400">대상</dt><dd>{election.audience_label}</dd></div>
+                </dl>
+                {election.content_restricted ? <p className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500"><LockKeyhole size={14} aria-hidden="true" />내용·결과는 투표 링크나 코드로 확인</p> : <>
+                <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500"><span>No. {electionNumber(election.id)}</span><span>{election.deadline_label}</span></p>
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="text-slate-500">투표 참여율</span>
+                    <span className="font-medium text-blue-700">{election.participation_rate == null ? "확인 불가" : `${election.participation_rate.toLocaleString("ko-KR", { maximumFractionDigits: 1 })}%`}</span>
                   </div>
-                  <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">
-                    {election.description || "설명이 등록되지 않았습니다."}
-                  </p>
-                  <div className="mt-4 flex gap-4 text-sm text-slate-500">
-                    <span>등록 유권자 {election.total_voter_codes}명</span>
-                    <span>{formatDateShort(election.starts_at)}</span>
-                  </div>
-                </Panel>
+                  {election.participation_rate != null ? <ProgressBar value={election.participation_rate} /> : null}
+                </div>
+                </>}
               </Link>
             ))}
           </div>
         )}
       </section>
     </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-lg border border-[var(--border)] bg-slate-50 p-5">
-      <div className="text-3xl font-semibold text-slate-950">{value}</div>
-      <div className="mt-1 text-sm text-slate-500">{label}</div>
-    </div>
-  );
-}
-
-function LinkMetric({
-  href,
-  label,
-  icon,
-}: {
-  href: string;
-  label: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex min-h-28 flex-col justify-between rounded-lg border border-[var(--border)] bg-slate-50 p-5 text-slate-700 transition hover:border-blue-300 hover:bg-blue-50"
-    >
-      {icon}
-      <span className="text-sm font-semibold">{label}</span>
-    </Link>
-  );
-}
-
-function SkeletonCard() {
-  return (
-    <Panel className="p-5">
-      <div className="h-7 w-20 animate-pulse rounded bg-slate-200" />
-      <div className="mt-4 h-6 w-2/3 animate-pulse rounded bg-slate-200" />
-      <div className="mt-3 h-4 w-full animate-pulse rounded bg-slate-100" />
-      <div className="mt-2 h-4 w-4/5 animate-pulse rounded bg-slate-100" />
-    </Panel>
   );
 }

@@ -1,0 +1,8 @@
+/.env*
+/.codex-logs/
+/.mcp.json
+/.claude/
+/docs/
+/supabase/
+/**/*.pem
+/secrets/

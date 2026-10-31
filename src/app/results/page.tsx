@@ -5,6 +5,8 @@ import { BarChart3, Lock, RefreshCw, Trophy } from "lucide-react";
 import { Alert, Badge, Button, EmptyState, Panel, ProgressBar } from "@/components/ui";
 import { ballotTypeLabel } from "@/lib/ballot";
 import { fetchJson } from "@/lib/client-fetch";
+import { CodeEntry } from "@/components/code-entry";
+import { pickElectionId } from "@/lib/election-search";
 import type { CandidateResult, Election, ElectionResults } from "@/lib/types";
 import { formatDate, percentage, statusLabel, statusTone } from "@/lib/utils";
 
@@ -16,27 +18,30 @@ type ResultsResponse = {
 
 type Row = CandidateResult & { name: string };
 
-export default function ResultsPage() {
-  const [elections, setElections] = useState<Election[]>([]);
-  const [selectedElectionId, setSelectedElectionId] = useState("");
-  const [data, setData] = useState<ResultsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+/** 운영 화면을 그대로 사용하는 관리자 모의 선거: 데이터만 주입하고 네트워크 호출은 막는다. */
+export default function ResultsPage({ simulation }: { simulation?: ResultsResponse }) {
+  const [elections, setElections] = useState<Election[]>(simulation ? [simulation.election] : []);
+  const [selectedElectionId, setSelectedElectionId] = useState(simulation?.election.id ?? "");
+  const [data, setData] = useState<ResultsResponse | null>(simulation ?? null);
+  const [loading, setLoading] = useState(!simulation);
   const [error, setError] = useState("");
 
   const loadResults = useCallback(async (id: string) => {
+    if (simulation) return;
     if (!id) {
       return;
     }
     setData(await fetchJson<ResultsResponse>(`/api/elections/${id}/results`));
-  }, []);
+  }, [simulation]);
 
   const refresh = useCallback(async () => {
+    if (simulation) return;
     setLoading(true);
     setError("");
     try {
       const list = await fetchJson<{ elections: Election[] }>("/api/elections?visibility=public");
       setElections(list.elections);
-      const id = selectedElectionId || list.elections[0]?.id || "";
+      const id = selectedElectionId || pickElectionId(list.elections, window.location.search);
       setSelectedElectionId(id);
       await loadResults(id);
     } catch (caught) {
@@ -44,11 +49,11 @@ export default function ResultsPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadResults, selectedElectionId]);
+  }, [loadResults, selectedElectionId, simulation]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (!simulation) void refresh();
+  }, [refresh, simulation]);
 
   // 진행 중인 선거는 종료되는 순간 결과가 열리도록 가끔 다시 확인한다
   const closed = data?.election.status === "closed";
@@ -62,8 +67,8 @@ export default function ResultsPage() {
     return () => window.clearInterval(timer);
   }, [closed, loadResults, selectedElectionId]);
 
-  const election = data?.election ?? null;
-  const results = data?.results ?? null;
+  const election = simulation?.election ?? data?.election ?? null;
+  const results = simulation ? simulation.results : data?.results ?? null;
 
   const rows = useMemo<Row[]>(() => {
     if (!election || !results) {
@@ -84,10 +89,10 @@ export default function ResultsPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="page-heading flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">투표 결과</h1>
-          <p className="mt-1 text-sm text-slate-500">결과는 투표가 종료된 뒤에만 공개됩니다.</p>
+          <p className="mt-1 text-sm text-slate-500">{simulation ? "모의 투표 데이터로 실제 결과 화면을 시험 중입니다." : "결과는 투표가 종료된 뒤에만 공개됩니다."}</p>
         </div>
         <Button variant="secondary" onClick={refresh} disabled={loading}>
           <RefreshCw size={18} aria-hidden="true" />
@@ -96,6 +101,7 @@ export default function ResultsPage() {
       </div>
 
       {error ? <Alert>{error}</Alert> : null}
+      {error.includes("투표 코드") ? <Panel className="p-5"><CodeEntry compact /></Panel> : null}
 
       {loading && !data ? (
         <Panel className="p-6">
@@ -120,6 +126,7 @@ export default function ResultsPage() {
                 <h2 className="mt-3 text-xl font-semibold text-slate-950">{election?.name}</h2>
               </div>
               <select
+                aria-label="결과를 확인할 선거"
                 className="h-11 max-w-full rounded-lg border border-[var(--border)] bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
                 value={selectedElectionId}
                 onChange={(event) => setSelectedElectionId(event.target.value)}

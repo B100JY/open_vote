@@ -43,12 +43,23 @@ export function normalizeElection(value: unknown): Election {
 
   return {
     id: String(record.id),
+    organization_name: typeof record.organization_name === "string" ? record.organization_name : "",
+    description_public: record.description_public === true,
+    content_restricted: record.content_restricted !== false,
+    home_closed_days: typeof record.home_closed_days === "number" ? record.home_closed_days : 7,
+    closed_at: typeof record.closed_at === "string" ? record.closed_at : null,
+    trashed_at: typeof record.trashed_at === "string" ? record.trashed_at : null,
+    purge_after: typeof record.purge_after === "string" ? record.purge_after : null,
+    objection_count: Number(record.objection_count ?? 0),
+    audit_version: record.audit_version === 1 ? 1 : 0,
     name: String(record.name ?? ""),
     description:
       typeof record.description === "string" ? record.description : null,
     candidates: normalizeCandidates(record.candidates),
     total_voter_codes: Number(record.total_voter_codes ?? 0),
     status: normalizeStatus(record.status),
+    auth_mode: typeof record.auth_mode === "string" ? record.auth_mode : null,
+    sms_title: typeof record.sms_title === "string" ? record.sms_title : null,
     ballot_type: normalizeBallotType(record.ballot_type),
     min_choices: positiveInt(record.min_choices),
     max_choices: positiveInt(record.max_choices),

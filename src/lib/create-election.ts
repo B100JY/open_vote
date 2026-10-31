@@ -1,6 +1,7 @@
+import { auditSigner } from "./native-audit-server";
+import { getServiceDbSupabase } from "./supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import { getServiceSupabase } from "@/lib/supabase/server";
-import { getCreditPerVoter } from "@/lib/billing";
 import type { NewVoter } from "@/lib/voters";
 import { CANDIDATE_ID_PATTERN } from "@/lib/ballot";
 import type { BallotRules, Candidate } from "@/lib/types";
@@ -11,6 +12,11 @@ export type ElectionRow = Database["app_open_vote"]["Tables"]["elections"]["Row"
 export type VoterRow = Database["app_open_vote"]["Tables"]["voter_registry"]["Row"];
 
 export type CreateElectionInput = {
+  organizationName?: string;
+  descriptionPublic?: boolean;
+  contentRestricted?: boolean;
+  audit?: boolean;
+  smsRequired?: boolean;
   creatorId: string;
   name: string;
   description?: string;
@@ -117,11 +123,20 @@ export async function createBilledElection(
     };
   }
 
-  const unitPrice = getCreditPerVoter();
+  // 문자 발송 시점에 예약·차감한다. 생성은 잔액이 없어도 가능하다.
+  const unitPrice = 0;
   const supabase = getServiceSupabase();
 
-  const { data, error } = await supabase.rpc("create_billed_election", {
+  if (input.smsRequired && (process.env.MOAI_OTP_SEND_ENABLED !== "true" || !process.env.MOAI_OTP_TEMPLATE)) return { ok: false, status: 503, error: "otp_not_configured", message: "문자 인증 발송이 준비되지 않아 과금 전에 중단했습니다." };
+  let signer: ReturnType<typeof auditSigner> | undefined;
+  if (input.audit || input.smsRequired) {
+    try { signer = auditSigner(); }
+    catch { return { ok: false, status: 503, error: "audit_not_configured", message: "감사 서명키가 준비되지 않았습니다. 과금 전에 요청을 중단했습니다." }; }
+  }
+  const args = {
     p_creator: input.creatorId,
+    p_organization_name: input.organizationName?.trim() ?? "",
+    p_description_public: input.descriptionPublic === true,
     p_name: name,
     p_description: input.description?.trim() ?? "",
     p_candidates: input.candidates as unknown as Json,
@@ -133,6 +148,10 @@ export async function createBilledElection(
     p_min_choices: input.rules.min_choices,
     p_max_choices: input.rules.max_choices,
     p_allow_blank: input.rules.allow_blank,
+  };
+  const { data, error } = await getServiceDbSupabase().rpc("workspace_create_billed", {
+    p_args: args, p_public_key: signer?.publicKey ?? null, p_key_id: signer?.keyId ?? null,
+    p_sms_required: input.smsRequired === true, p_content_restricted: input.contentRestricted !== false,
   });
 
   if (error) {

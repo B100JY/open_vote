@@ -6,6 +6,7 @@ import { getServiceDbSupabase } from "@/lib/supabase/server";
 import { voteErrorStatus } from "@/lib/vote-status";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const ipAddress = getClientIp(request);
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
       );
     }
 
+    scheduleNotifications();
     return NextResponse.json({
       success: true,
       message: voteResult.message ?? "투표가 완료되었습니다.",
@@ -119,3 +121,4 @@ export async function POST(request: Request) {
     );
   }
 }
+import { scheduleNotifications } from "@/lib/admin-notifications";

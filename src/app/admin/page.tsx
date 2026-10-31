@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Coins,
   Download,
+  Eye,
   ListChecks,
   MessageSquareText,
   Plus,
@@ -14,9 +15,12 @@ import {
 } from "lucide-react";
 import { AdminGate } from "@/components/admin-gate";
 import { Alert, Button, Field, Panel, Textarea } from "@/components/ui";
+import { ContactPicker } from "@/components/contact-picker";
+import { ElectionPreview, CREATION_LOCK_NOTICE } from "@/components/election-preview";
 import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
-import { BALLOT_TYPES, cleanBallotRules, describeBallotRules } from "@/lib/ballot";
+import { SMS_TITLE_MAX, defaultSmsTitle } from "@/lib/sms-title";
+import { BALLOT_TYPES, cleanBallotRules, describeBallotRules, hasApprovalAnswerOptions } from "@/lib/ballot";
 import type { BallotType, Candidate, CreditsSummary, Election, VoterRegistry } from "@/lib/types";
 import { csvEscape, formatDate } from "@/lib/utils";
 import { formatPhone, normalizePhone } from "@/lib/voters";
@@ -32,6 +36,7 @@ type OptionPreset = {
   label: string;
   description: string;
   items: string[];
+  singleChoice?: boolean;
 };
 
 type VoterMode = "sms" | "email";
@@ -60,14 +65,23 @@ const optionPresets: OptionPreset[] = [
   },
   {
     id: "yes-no",
+    singleChoice: true,
     label: "예 / 아니오",
     description: "단순 찬반 또는 승인 여부 투표에 적합합니다.",
     items: ["예", "아니오"],
   },
   {
+    id: "agree-disagree",
+    label: "찬성 / 반대",
+    description: "한 안건에 찬성 또는 반대 중 하나를 선택합니다.",
+    items: ["찬성", "반대"],
+    singleChoice: true,
+  },
+  {
     id: "agree-disagree-hold",
+    singleChoice: true,
     label: "찬성 / 반대 / 보류",
-    description: "노조 안건이나 의사결정 투표에 바로 사용할 수 있습니다.",
+    description: "안건이나 의사결정 투표에 바로 사용할 수 있습니다.",
     items: ["찬성", "반대", "보류"],
   },
   {
@@ -139,7 +153,10 @@ export default function AdminPage() {
 
 function AdminCreateForm() {
   const [name, setName] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [descriptionPublic, setDescriptionPublic] = useState(false);
   const [description, setDescription] = useState("");
+  const [smsTitle, setSmsTitle] = useState("");
   const [voterMode, setVoterMode] = useState<VoterMode>("sms");
   const [voterPhones, setVoterPhones] = useState("");
   const [voterEmails, setVoterEmails] = useState("");
@@ -150,9 +167,13 @@ function AdminCreateForm() {
   const [minChoices, setMinChoices] = useState(1);
   const [maxChoices, setMaxChoices] = useState(1);
   const [allowBlank, setAllowBlank] = useState(false);
+  const [enableAudit, setEnableAudit] = useState(true);
+  const [contentRestricted, setContentRestricted] = useState(true);
+  const [smsRequired, setSmsRequired] = useState(false);
   const [period, setPeriod] = useState(defaultPeriod);
   const [credits, setCredits] = useState<CreditsSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<CreateResponse | null>(null);
 
@@ -192,11 +213,11 @@ function AdminCreateForm() {
 
   const voterCount =
     voterMode === "sms" ? phoneParse.voters.length : voterEmailList.length;
-  const unitPrice = credits?.unitPrice ?? 10;
+  const unitPrice = credits?.unitPrice ?? 30;
   const estimatedCost = voterCount * unitPrice;
-  const insufficient = credits !== null && estimatedCost > credits.balance;
 
   const filledCandidates = candidates.filter((candidate) => candidate.name.trim()).length;
+  const approvalAnswerConflict = ballotType === "approve" && hasApprovalAnswerOptions(candidates);
   const rulesCheck = cleanBallotRules(
     { ballotType, minChoices, maxChoices, allowBlank },
     Math.max(filledCandidates, 1),
@@ -231,6 +252,7 @@ function AdminCreateForm() {
   }
 
   function applyPreset(preset: OptionPreset) {
+    if (preset.singleChoice) simplifyApproval();
     setSelectedPresetId(preset.id);
     setCandidateName("");
 
@@ -242,6 +264,11 @@ function AdminCreateForm() {
     setCandidates(preset.items.map((item) => createOption(item)));
   }
 
+  function simplifyApproval() {
+    setBallotType("single");
+    setMinChoices(1); setMaxChoices(1);
+  }
+
   async function submit() {
     setLoading(true);
     setError("");
@@ -250,10 +277,16 @@ function AdminCreateForm() {
       const payload: Record<string, unknown> = {
         name,
         description,
+        organizationName,
+        descriptionPublic,
+        smsTitle,
         ballotType,
         minChoices,
         maxChoices,
         allowBlank,
+        enableAudit,
+        contentRestricted,
+        smsRequired,
         startsAt: period.start ? new Date(period.start).toISOString() : undefined,
         endsAt: period.end ? new Date(period.end).toISOString() : undefined,
         candidates: candidates
@@ -299,7 +332,11 @@ function AdminCreateForm() {
 
   function reset() {
     setName("");
+    setOrganizationName("");
+    setDescriptionPublic(false);
+    setPreviewOpen(false);
     setDescription("");
+    setSmsTitle("");
     setVoterPhones("");
     setVoterEmails("");
     setCandidateName("");
@@ -360,9 +397,8 @@ function AdminCreateForm() {
         </div>
 
         <Alert tone="success">
-          유권자 {created.voters.length}명이 등록되었고 포인트{" "}
-          {created.billing.cost.toLocaleString()}P가 차감되었습니다 (잔액{" "}
-          {created.billing.balance.toLocaleString()}P). 선거는 준비중 상태로
+          유권자 {created.voters.length}명이 등록되었습니다. 투표 생성 비용은 없으며,
+          문자 발송 시 선택한 형식과 발송 수에 따라 포인트를 사용합니다. 선거는 준비중 상태로
           생성되며, 선거 관리에서 진행중으로 전환한 뒤 투표 링크 문자를 발송할 수
           있습니다.
         </Alert>
@@ -437,8 +473,9 @@ function AdminCreateForm() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      {previewOpen ? <ElectionPreview name={name} organizationName={organizationName} description={description} descriptionPublic={descriptionPublic} contentRestricted={contentRestricted} candidates={candidates.filter(candidate => candidate.name.trim())} rules={rulesCheck.ok ? rulesCheck.rules : null} rulesError={rulesCheck.ok ? undefined : rulesCheck.message} startsAt={period.start} endsAt={period.end} voterCount={voterCount} smsRequired={smsRequired} onClose={() => setPreviewOpen(false)} onSimplifyApproval={simplifyApproval} /> : null}
       <section>
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="page-heading flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-slate-950">새 투표 생성</h1>
             <p className="mt-1 text-sm text-slate-500">
@@ -446,6 +483,7 @@ function AdminCreateForm() {
               발송할 수 있습니다.
             </p>
           </div>
+          <Button variant="secondary" onClick={() => setPreviewOpen(true)} disabled={loading}><Eye size={18} aria-hidden="true" />미리보기</Button>
           <Link
             href="/admin/elections"
             className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
@@ -455,24 +493,38 @@ function AdminCreateForm() {
           </Link>
         </div>
 
-        <Panel className="p-5">
-          <div className="grid gap-4">
+        <Panel className="p-5 sm:p-7">
+          <div className="grid gap-5">
+            <h2 className="form-section-title"><span>01</span> 기본 정보</h2>
             <Field
               label="투표명"
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="예: 2026년 정기 임원 선거"
             />
+            <Field label="단체명 (선택)" value={organizationName} onChange={event => setOrganizationName(event.target.value)} maxLength={120} placeholder="예: 더케이텍 노동조합" />
             <Textarea
               label="투표 설명"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               placeholder="투표에 대한 간단한 설명"
             />
+            <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={descriptionPublic} onChange={event => setDescriptionPublic(event.target.checked)} className="mt-1" />투표 설명을 공개 화면에도 표시</label>
+            <p className="-mt-3 text-xs leading-5 text-slate-500">기본은 비공개입니다. 참여자는 투표 링크·코드로 확인한 뒤 설명을 볼 수 있습니다. 내용·결과 공개 제한을 켜면 그 제한을 함께 따릅니다.</p>
+            {voterMode === "sms" ? (
+              <Field
+                label="안내 문자 제목"
+                value={smsTitle}
+                onChange={(event) => setSmsTitle(event.target.value)}
+                maxLength={SMS_TITLE_MAX}
+                placeholder={defaultSmsTitle(name || "투표명")}
+                hint={`문자 첫 줄에 들어갑니다(${SMS_TITLE_MAX}자까지, 링크·전화번호·이모지 불가). 비우면 "${defaultSmsTitle(name || "투표명")}". 나머지 문구는 정해진 형식입니다.`}
+              />
+            ) : null}
 
-            <div className="grid gap-2">
-              <span className="text-sm font-medium text-slate-700">유권자 명부</span>
-              <div className="flex gap-2">
+            <div className="grid gap-3 border-t border-[var(--border)] pt-6">
+              <h2 className="form-section-title"><span>02</span> 유권자 명부</h2>
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="secondary"
                   className={
@@ -500,6 +552,7 @@ function AdminCreateForm() {
 
               {voterMode === "sms" ? (
                 <>
+                  <ContactPicker onAdd={lines=>setVoterPhones(current=>{const known=new Set(current.split(/\r?\n/).map(l=>l.split(",")[0].replace(/\D/g,"")));return [current,...lines.split("\n").filter(l=>{const p=l.split(",")[0];if(known.has(p))return false;known.add(p);return true;})].filter(Boolean).join("\n");})}/>
                   <Textarea
                     label="휴대폰 번호 목록 (한 줄에 한 명, 번호 뒤에 쉼표로 이름 추가 가능)"
                     value={voterPhones}
@@ -524,7 +577,8 @@ function AdminCreateForm() {
               )}
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
+            <h2 className="form-section-title border-t border-[var(--border)] pt-6"><span>03</span> 투표 기간</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-2">
                 <span className="text-sm font-medium text-slate-700">투표 시작</span>
                 <input
@@ -548,8 +602,8 @@ function AdminCreateForm() {
               </p>
             </div>
 
-            <div className="grid gap-3 rounded-lg border border-[var(--border)] bg-slate-50 p-4">
-              <span className="text-sm font-medium text-slate-700">투표 방식</span>
+            <div className="grid gap-4 border-t border-[var(--border)] pt-6">
+              <h2 className="form-section-title"><span>04</span> 투표 방식</h2>
               <div className="grid gap-2 md:grid-cols-2">
                 {BALLOT_TYPES.map((type) => (
                   <Button
@@ -585,6 +639,7 @@ function AdminCreateForm() {
                 ))}
               </div>
 
+              {approvalAnswerConflict ? <div className="grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900"><p>현재 설정은 ‘찬성’과 ‘반대’ 각각에 다시 찬반을 묻습니다. 한 안건의 찬반을 묻는다면 하나 선택으로 바꿔주세요.</p><Button variant="secondary" onClick={simplifyApproval}>찬성·반대 중 하나 선택으로 변경</Button></div> : null}
               {ballotType === "multi" || ballotType === "rank" ? (
                 <div className="grid gap-2 sm:grid-cols-2">
                   <NumberField
@@ -610,6 +665,10 @@ function AdminCreateForm() {
                 기권(백지) 투표 허용
               </label>
 
+              <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={enableAudit} onChange={e=>{setEnableAudit(e.target.checked);if(!e.target.checked)setSmsRequired(false);}} />서명 확인증·공개 감사 사용</label>
+              <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={smsRequired} disabled={!enableAudit} onChange={e=>setSmsRequired(e.target.checked)} />제출 전 휴대폰 문자 인증</label>
+              <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={contentRestricted} onChange={e=>setContentRestricted(e.target.checked)} className="mt-1" />기본 정보는 홈에 표시하고, 내용·결과는 투표 링크나 코드로 확인한 사람에게만 공개</label>
+              <p className="text-xs leading-6 text-slate-500">문자 인증은 등록 휴대폰이 필요하며 발송당 1P가 추가 차감됩니다. 링크 유출 위험을 줄이지만 운영자 부정을 증명하지는 않습니다. 시작 후 규칙·명부를 바꿀 수 없으니 미리 확인해주세요.</p>
               {rulesCheck.ok ? (
                 <p className="text-xs text-slate-500">
                   유권자 안내: {describeBallotRules(rulesCheck.rules, filledCandidates)}
@@ -619,11 +678,11 @@ function AdminCreateForm() {
               )}
             </div>
 
-            <div className="rounded-lg border border-[var(--border)] bg-slate-50 p-4">
+            <div className="border-t border-[var(--border)] pt-6">
               <div className="grid gap-4">
                 <div className="grid gap-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-slate-700">항목 등록</span>
+                    <h2 className="form-section-title"><span>05</span> 항목 등록</h2>
                     <span className="text-xs text-slate-500">
                       후보자 이름이나 안건 선택지를 등록합니다.
                     </span>
@@ -722,25 +781,19 @@ function AdminCreateForm() {
             </div>
 
             {error ? <Alert>{error}</Alert> : null}
-            {insufficient ? (
-              <Alert tone="warning">
-                포인트 잔액이 부족합니다. 필요 {estimatedCost.toLocaleString()}P,
-                보유 {credits?.balance.toLocaleString()}P —{" "}
-                <Link href="/admin/credits" className="font-semibold underline">
-                  포인트 충전 안내
-                </Link>
-              </Alert>
-            ) : null}
+
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">{CREATION_LOCK_NOTICE}</p>
+            <Button variant="secondary" onClick={() => setPreviewOpen(true)} disabled={loading}><Eye size={18} aria-hidden="true" />생성 전 미리보기</Button>
 
             <Button
               onClick={submit}
-              disabled={loading || insufficient}
+              disabled={loading}
               className="w-full sm:w-fit"
             >
               <CheckCircle2 size={18} aria-hidden="true" />
               {loading
                 ? "생성 중"
-                : `투표 생성 (${estimatedCost.toLocaleString()}P 차감)`}
+                : "투표 생성 (무료)"}
             </Button>
           </div>
         </Panel>
@@ -757,8 +810,8 @@ function AdminCreateForm() {
             <Row label="항목" value={`${candidates.length}개`} />
             <Row label="유권자" value={`${voterCount}명`} />
             <Row
-              label={`예상 비용 (1인 ${unitPrice}P)`}
-              value={`${estimatedCost.toLocaleString()}P`}
+              label="최초 문자 발송 예상 (간편 / 기존)"
+              value={`${(voterCount*(credits?.smsPrices?.compact??10)).toLocaleString()} / ${estimatedCost.toLocaleString()}P`}
             />
             <Row
               label="포인트 잔액"
@@ -771,22 +824,16 @@ function AdminCreateForm() {
             <Row label="초기 상태" value="준비중" />
           </dl>
           <Link
-            href="/admin/credits"
+            href="/credits"
             className="mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
           >
             <Coins size={17} aria-hidden="true" />
             포인트 관리
           </Link>
-          <Link
-            href="/admin/members"
-            className="ml-2 mt-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-white px-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-          >
-            회원 승인 (관리자)
-          </Link>
         </Panel>
         <Alert tone="info">
-          투표 생성 시 유권자 1인당 {unitPrice}P가 선불 포인트에서 차감됩니다.
-          문자 발송은 생성 후 선거를 진행중으로 전환한 뒤 시작할 수 있습니다.
+          투표 생성은 무료입니다. 문자 발송 시 간편 SMS {credits?.smsPrices?.compact??10}P/건, 기존 안내 {unitPrice}P/건으로 계산합니다.
+          발송 직전 잔액을 확인하고 부족하면 충전 후 보낼 수 있습니다.
         </Alert>
         <Alert tone="info">
           명부에는 투표 여부만 남고 투표 시각은 기록하지 않습니다. 투표지는 명부와

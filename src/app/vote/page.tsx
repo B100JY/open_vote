@@ -34,11 +34,11 @@ export default function VoteSelectPage() {
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="page-heading flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-950">투표하기</h1>
           <p className="mt-1 text-sm text-slate-500">
-            진행 중인 선거만 표시됩니다.
+            참여할 선거를 선택해주세요. 개인 링크를 받으셨다면 해당 링크로 바로 참여할 수 있습니다.
           </p>
         </div>
         <Button variant="secondary" onClick={load} disabled={loading}>
@@ -64,7 +64,7 @@ export default function VoteSelectPage() {
         <div className="grid gap-3 md:grid-cols-2">
           {elections.map((election) => (
             <Link key={election.id} href={`/vote/${election.id}/auth`}>
-              <Panel className="h-full p-5 transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md">
+              <Panel className="h-full p-6 transition hover:border-blue-300 hover:shadow-md">
                 <div className="flex items-start justify-between gap-3">
                   <Badge className={statusTone(election.status)}>
                     {statusLabel(election.status)}

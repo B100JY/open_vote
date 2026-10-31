@@ -7,6 +7,7 @@ import { sendVoteLinks, type VoteSmsTarget } from "@/lib/notifier";
 import type { Candidate } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 // [과금 모델] nozolink 연동 선거 생성 API (X-Api-Key 인증).
 // 유권자 수 × 단가를 연동 "조합 지갑"(union_point_wallets)에서 선불 차감한다
@@ -200,6 +201,7 @@ export async function POST(request: Request) {
       }
     }
 
+    scheduleNotifications();
     return NextResponse.json({
       success: true,
       election: {
@@ -221,3 +223,4 @@ export async function POST(request: Request) {
     );
   }
 }
+import { scheduleNotifications } from "@/lib/admin-notifications";

@@ -1,14 +1,12 @@
 /**
- * 투표 생성 과금 정책.
+ * 문자 발송 요율. 투표 생성 자체는 무료다.
  *
- * 유권자 1인당 포인트(기본 10P = 10원 상당)를 투표 생성 시점에 선불 포인트
- * 계정(credit_accounts)에서 차감합니다. 포인트는 관리자 지급(충전 확인)으로
- * 적립되며, 실제 PG 결제 연동 전까지의 선불 모델입니다.
+ * 발송 직전에 전체 비용을 예약하고 성공분은 사용, 확정 실패분은 반환한다.
  */
 
-const DEFAULT_CREDIT_PER_VOTER = 10;
+const DEFAULT_CREDIT_PER_VOTER = 30;
 
-/** 유권자 1인당 차감 포인트. env `VOTE_CREDIT_PER_VOTER`로 조정 가능 */
+/** 기존 안내 문자 단가. 이전 환경변수 이름은 호환을 위해 유지한다. */
 export function getCreditPerVoter(): number {
   const raw = Number(process.env.VOTE_CREDIT_PER_VOTER);
   if (Number.isInteger(raw) && raw >= 0) {
@@ -21,5 +19,11 @@ export function voteCreationCost(voterCount: number): number {
   if (!Number.isInteger(voterCount) || voterCount <= 0) {
     return 0;
   }
-  return voterCount * getCreditPerVoter();
+  return 0;
+}
+
+/** 간편 SMS 단가. */
+export function getSmsPrices() {
+  const raw = Number(process.env.VOTE_COMPACT_SMS_PRICE ?? 10);
+  return { standard: getCreditPerVoter(), compact: Number.isInteger(raw) && raw >= 0 ? raw : 10 };
 }

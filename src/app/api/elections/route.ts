@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
+import { electionForViewer } from "@/lib/election-view-access";
 import { jsonError } from "@/lib/api-response";
-import { getRequestMember, requireVoteCreator } from "@/lib/supabase/auth";
-import { getServiceSupabase } from "@/lib/supabase/server";
+import { requireAdmin, requireVoteCreator } from "@/lib/supabase/auth";
+import { getServiceSupabase, getServiceDbSupabase } from "@/lib/supabase/server";
 import { cleanBallotRules } from "@/lib/ballot";
 import { cleanCandidatesInput, createBilledElection } from "@/lib/create-election";
 import { cleanVoters, votersFromEmails } from "@/lib/voters";
 import type { ElectionStatus } from "@/lib/types";
+import { checkSmsTitle } from "@/lib/sms-title";
 import { normalizeElection } from "@/lib/utils";
+import { canViewElection } from "@/lib/election-view-access";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 const statuses = new Set<ElectionStatus>(["draft", "active", "paused", "closed"]);
 // 비관리자(공개)에게 노출 가능한 상태
 const publicStatuses = new Set<ElectionStatus>(["active", "closed"]);
@@ -17,9 +21,13 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
-    const userInfo = await getRequestMember(request);
-    const admin = userInfo?.member.role === "admin";
-    const creator = admin || userInfo?.member.role === "creator";
+    // 구버전 관리 화면도 인증 헤더가 있으면 본인 목록으로 제한한다.
+    const scope = searchParams.get("scope") ?? (searchParams.get("visibility") === "public" ? "public" : request.headers.has("authorization") ? "mine" : "public");
+    if (!["public", "mine", "all"].includes(scope)) return jsonError("목록 범위를 확인해주세요.",400);
+    const auth = scope === "all" ? await requireAdmin(request) : scope === "mine" ? await requireVoteCreator(request) : null;
+    if (auth && !auth.ok) return jsonError(auth.message,auth.status,auth.error);
+    const trash = searchParams.get("trash") === "1";
+    if (trash && scope === "public") return jsonError("로그인이 필요합니다.",401);
     const supabase = getServiceSupabase();
     // 마감 시각이 지난 선거를 먼저 닫는다(별도 스케줄러 없이 조회 때 정리)
     await supabase.rpc("close_expired_elections");
@@ -28,17 +36,15 @@ export async function GET(request: Request) {
       .from("elections")
       .select("*")
       .order("created_at", { ascending: false });
+    query = trash ? query.not("trashed_at", "is", null) : query.is("trashed_at", null);
 
-    if (admin) {
-      // 관리자는 draft/paused 포함 모든 상태를 조회할 수 있습니다.
+    if (scope === "all") {
+      // 관리자 전용 전체 목록. 공개 목록이나 내 목록과 합치지 않는다.
       if (status && statuses.has(status as ElectionStatus)) {
         query = query.eq("status", status as ElectionStatus);
       }
-    } else if (creator && userInfo) {
-      // 투표 생성자는 공개 상태 + 자신이 만든 선거(draft/paused 포함)를 조회합니다.
-      query = query.or(
-        `status.in.(active,closed),created_by.eq.${userInfo.user.id}`,
-      );
+    } else if (scope === "mine" && auth?.ok) {
+      query = query.eq("created_by", auth.user.user.id);
       if (status && statuses.has(status as ElectionStatus)) {
         query = query.eq("status", status as ElectionStatus);
       }
@@ -56,9 +62,20 @@ export async function GET(request: Request) {
       return jsonError("선거 목록을 불러오지 못했습니다.", 500, error.message);
     }
 
+    const counts = new Map<string,number>();
+    if (trash && data?.length) {
+      const {data: objections,error: oe} = await getServiceDbSupabase().from("election_objections").select("election_id").in("election_id",data.map(e=>e.id));
+      if(oe) return jsonError("이의제기 상태를 확인하지 못했습니다.",503);
+      for(const o of objections??[]) counts.set(o.election_id,(counts.get(o.election_id)??0)+1);
+    }
+    const rows = [];
+    for (const election of data ?? []) {
+      if (scope === "public" && !await canViewElection(request, election)) rows.push({id:election.id,name:election.name,content_restricted:true,restricted:true});
+      else rows.push(normalizeElection({...scope === "public" ? await electionForViewer(request,election) : election,objection_count:counts.get(election.id)??0}));
+    }
     return NextResponse.json({
-      elections: (data ?? []).map((election) => normalizeElection(election)),
-    });
+      elections: rows,
+    }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return jsonError(
       error instanceof Error ? error.message : "선거 목록을 불러오지 못했습니다.",
@@ -68,8 +85,8 @@ export async function GET(request: Request) {
 }
 
 // [과금 모델] 독립형 관리자/생성자 선거 생성 (세션 인증, requireVoteCreator).
-// 유권자 수 × 단가를 생성자 개인 "소유자 포인트"(point_wallets)에서 선불 차감한다
-// (createBilledElection → create_billed_election). nozolink 연동 선거는 별도 경로
+// 생성 자체는 무료이며 문자 발송 때 포인트를 예약·사용한다.
+// (createBilledElection → create_billed_election 단가 0). nozolink 연동 선거는 별도 경로
 // (POST /api/v1/elections, 조합 지갑 과금)를 쓴다.
 export async function POST(request: Request) {
   try {
@@ -79,6 +96,9 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as Record<string, unknown>;
+    if (body.descriptionPublic !== undefined && typeof body.descriptionPublic !== "boolean") return jsonError("설명 공개 설정을 확인해주세요.",400);
+    if (body.organizationName !== undefined && (typeof body.organizationName !== "string" || body.organizationName.trim().length > 120)) return jsonError("단체명은 120자 이내로 입력해주세요.",400);
+    if (body.contentRestricted !== undefined && typeof body.contentRestricted !== "boolean") return jsonError("내용 공개 설정을 확인해주세요.",400);
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const description =
       typeof body.description === "string" ? body.description.trim() : "";
@@ -97,6 +117,11 @@ export async function POST(request: Request) {
       );
     }
 
+    const smsTitle = checkSmsTitle(body.smsTitle);
+    if (!smsTitle.ok) {
+      return jsonError(smsTitle.message, 400, "invalid_sms_title");
+    }
+
     const rules = cleanBallotRules(body, candidates.length);
     if (!rules.ok) {
       return jsonError(rules.message, 400, "invalid_ballot_rules");
@@ -110,7 +135,12 @@ export async function POST(request: Request) {
     }
 
     const result = await createBilledElection({
+      contentRestricted: body.contentRestricted !== false,
+      organizationName: typeof body.organizationName === "string" ? body.organizationName.trim() : "",
+      descriptionPublic: body.descriptionPublic === true,
       creatorId: auth.user.user.id,
+      audit: body.enableAudit === true,
+      smsRequired: body.smsRequired === true,
       name,
       description,
       candidates,
@@ -124,8 +154,20 @@ export async function POST(request: Request) {
       return jsonError(result.message, result.status, result.error);
     }
 
+    scheduleNotifications();
+    let created = result.election;
+    if (smsTitle.value) {
+      const { data: titled } = await getServiceSupabase()
+        .from("elections")
+        .update({ sms_title: smsTitle.value })
+        .eq("id", result.election.id)
+        .select("*")
+        .single();
+      if (titled) created = titled;
+    }
+
     return NextResponse.json({
-      election: normalizeElection(result.election),
+      election: normalizeElection(created),
       voters: result.voters,
       billing: result.billing,
     });
@@ -144,3 +186,4 @@ function parseDate(value: unknown) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
+import { scheduleNotifications } from "@/lib/admin-notifications";

@@ -1,5 +1,6 @@
 "use client";
 
+import { PendingAuditRecovery } from "@/components/pending-audit-recovery";
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { BallotSheet } from "@/components/ballot-sheet";
@@ -26,10 +27,6 @@ export function MemberBallotClient({ electionId }: { electionId: string }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetchJson<{ election: Election }>(`/api/elections/${electionId}`)
-      .then((data) => setElection(data.election))
-      .catch(() => setElection(null));
-
     const supabase = getBrowserSupabase();
     if (!supabase) {
       setChecking(false);
@@ -51,6 +48,10 @@ export function MemberBallotClient({ electionId }: { electionId: string }) {
         { headers: { Authorization: `Bearer ${token}` } },
       );
       setStatus(voterStatus);
+      if (voterStatus.registered) {
+        const detail = await fetchJson<{election:Election}>(`/api/elections/${electionId}`,{headers:{Authorization:`Bearer ${token}`}});
+        setElection(detail.election);
+      }
     }
 
     loadAuth()
@@ -97,6 +98,7 @@ export function MemberBallotClient({ electionId }: { electionId: string }) {
               : "현재 계정은 이 선거의 조합원 명부에 없습니다."}
           </p>
         </Panel>
+        {status.hasVoted ? <PendingAuditRecovery electionId={electionId} /> : null}
       </div>
     );
   }
@@ -126,6 +128,7 @@ export function MemberBallotClient({ electionId }: { electionId: string }) {
   return (
     <BallotSheet
       election={election}
+      credential={{ body: { electionId }, headers: { Authorization: `Bearer ${accessToken}` } }}
       notice="노조링크 조합원 인증으로 본인 확인되었습니다."
       submit={(selection, receiptHash) =>
         fetchJson<{ success: true; receiptHash: string }>("/api/vote", {

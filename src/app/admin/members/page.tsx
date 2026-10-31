@@ -71,11 +71,11 @@ function MembersList() {
 
   return (
     <div className="grid gap-5">
-      <Link href="/admin" className="text-sm font-semibold text-blue-700">← 투표 관리</Link>
+      <Link href="/admin/manage" className="text-sm font-semibold text-blue-700">← 관리자 메뉴</Link>
       <Panel className="p-5 sm:p-6">
-        <h1 className="text-xl font-semibold">다모음 회원 승인</h1>
+        <h1 className="text-xl font-semibold">모아이투표 회원 관리</h1>
         <p className="mt-2 text-sm text-slate-600">
-          새 가입자는 권한 대기 상태입니다. 신청자의 신원을 확인한 뒤 선거 생성자로 승인하세요.
+          가입 즉시 투표를 만들 수 있습니다. 필요한 경우 이용을 정지하거나 해제하세요.
           서비스 관리자는 보안상 이 화면에서 신규 지정할 수 없습니다.
         </p>
         {error ? <div className="mt-4"><Alert>{error}</Alert></div> : null}
@@ -99,11 +99,7 @@ function MembersList() {
                     {member.role === "pending" || member.role === "suspended" ? (
                       <Button variant="secondary" disabled={busyId === member.id || !member.email_verified}
                         title={!member.email_verified ? "본인확인 후 별도 운영 절차로 인증 상태를 처리해야 합니다." : undefined}
-                        onClick={() => approve(member, "creator")}>생성자 승인</Button>
-                    ) : null}
-                    {member.role === "creator" ? (
-                      <Button variant="secondary" disabled={busyId === member.id}
-                        onClick={() => approve(member, "pending")}>승인 해제</Button>
+                        onClick={() => approve(member, "creator")}>이용 허용</Button>
                     ) : null}
                     {member.role !== "admin" && member.role !== "suspended" ? (
                       <Button variant="danger" disabled={busyId === member.id}

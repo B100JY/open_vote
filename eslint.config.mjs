@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     ".dart_tool/**",
     "supabase/**",
     "web/**",
+    ".claude/worktrees/**",
+    ".codex-logs/**",
   ]),
 ]);
 
