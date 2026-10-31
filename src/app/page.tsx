@@ -10,6 +10,7 @@ import { electionNumber, matchesElectionQuery } from "@/lib/election-search";
 import { MoaiIcon } from "@/components/moai-icon";
 import { publicPeriodDate, type PublicElectionSummary } from "@/lib/public-election-summary";
 
+
 export default function HomePage() {
   const [elections, setElections] = useState<PublicElectionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,6 +92,32 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Link
+          href="/trust"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+        >
+          <ShieldCheck size={18} aria-hidden="true" />
+          보안 기술 확인
+        </Link>
+        <Link
+          href="/admin"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-white px-4 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+        >
+          <ClipboardList size={18} aria-hidden="true" />
+          투표 생성
+        </Link>
+      </div>
+
+      <p className="text-center text-xs leading-5 text-slate-400">
+        <Vote className="mr-1 inline" size={14} aria-hidden="true" />
+        투표에 참여할 때는 가입이 필요 없습니다.
+        <span className="mx-2">·</span>
+        <Link href="/privacy" className="underline underline-offset-2">
+          개인정보처리방침
+        </Link>
+      </p>
     </div>
   );
 }
