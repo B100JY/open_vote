@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { Info, Vote } from "lucide-react";
 import { BallotForm } from "@/components/ballot-form";
 import { Alert, Button } from "@/components/ui";
@@ -190,10 +189,10 @@ export function BallotSheet({
         </span>
       </Alert>
 
-      {audited ? <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
+      {/* {audited ? <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm">
         <div className="flex items-center gap-2 text-slate-600"><span>검증용 자료 · 저장은 선택입니다</span><Link href="/trust/verification" target="_blank" rel="noopener noreferrer" aria-label="검증용 자료 설명 보기 (새 탭)" className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-blue-700 hover:bg-blue-50"><Info size={18} aria-hidden="true" /></Link></div>
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-blue-700"><a className="underline" href={`/api/elections/${election.id}/audit?manifest=1`} download>시작 규칙 저장</a><a className="underline" href={`/api/elections/${election.id}/audit?checkpoint=1`} download>현재 기준점 저장</a></div>
-      </div> : null}
+      </div> : null} */}
       {error ? <Alert>{error}</Alert> : null}
 
       <BallotForm

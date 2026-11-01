@@ -54,16 +54,16 @@ export function describeBallotRules(rules: BallotRules, candidateCount: number) 
   switch (rules.ballot_type) {
     case "multi":
       return rules.min_choices === rules.max_choices
-        ? `${rules.max_choices}개를 선택합니다.${blank}`
-        : `${rules.min_choices}~${rules.max_choices}개를 선택합니다.${blank}`;
+        ? `${rules.max_choices}개를 선택하세요.${blank}`
+        : `${rules.min_choices}~${rules.max_choices}개를 선택하세요.${blank}`;
     case "rank":
       return rules.min_choices === rules.max_choices
-        ? `선호하는 순서대로 ${rules.max_choices}순위까지 매깁니다.${blank}`
-        : `선호하는 순서대로 ${rules.min_choices}~${rules.max_choices}순위를 매깁니다.${blank}`;
+        ? `선호하는 순서대로 ${rules.max_choices}순위까지 선택하세요.${blank}`
+        : `선호하는 순서대로 ${rules.min_choices}~${rules.max_choices}순위를 선택하세요.${blank}`;
     case "approve":
-      return `${candidateCount > 1 ? "각 항목마다 " : ""}찬성 또는 반대를 표시합니다.${blank}`;
+      return `${candidateCount > 1 ? "각 항목마다 " : ""}찬성 또는 반대를 선택하세요.${blank}`;
     default:
-      return `한 항목만 선택합니다.${blank}`;
+      return `한 항목만 선택하세요.${blank}`;
   }
 }
 
