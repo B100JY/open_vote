@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle2, FileCheck2, ShieldCheck, XCircle } from "lucide-react";
 import { Alert, Button, Panel } from "@/components/ui";
 import { ReceiptPassphraseInput } from "@/components/receipt-passphrase-input";
@@ -23,7 +23,21 @@ export default function VerifyPage({ simulation, simulatedBundle }: {
   simulatedBundle?: AuditBundle;
 }) {
   const [file, setFile] = useState<File | null>(null);
+  const [receiptTitle, setReceiptTitle] = useState("");
   const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    let current = true;
+    if (!file || file.size > 1_000_000) return;
+    void file.text().then(raw => {
+      if (!current) return;
+      const receipt = parseVerificationReceipt(raw);
+      if (receipt && isProtectedReceipt(receipt) && receipt.electionName.trim()) {
+        setReceiptTitle(receipt.electionName.trim().slice(0, 120));
+      }
+    }).catch(() => undefined);
+    return () => { current = false; };
+  }, [file]);
   const [checks, setChecks] = useState<AuditCheck[] | null>(null);
   const [selection, setSelection] = useState("");
   const [electionName, setElectionName] = useState("");
@@ -110,6 +124,7 @@ export default function VerifyPage({ simulation, simulatedBundle }: {
               accept=".json,application/json"
               aria-label="영수증 JSON 파일 선택"
               onChange={event => {
+                setReceiptTitle("");
                 setFile(event.target.files?.[0] ?? null);
                 resetResults();
               }}
@@ -127,6 +142,12 @@ export default function VerifyPage({ simulation, simulatedBundle }: {
             </span>
           </label>
         </div>
+        {receiptTitle ? (
+          <p aria-live="polite" className="break-words rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm leading-6 text-blue-900">
+            <span className="font-semibold">영수증에 적힌 투표명:</span> {receiptTitle}
+            <span className="block text-xs text-blue-700">아직 검증 전입니다. 선거 종료 후 파일과 암호로 확인할 수 있습니다.</span>
+          </p>
+        ) : null}
         <label className="grid gap-1 text-sm font-medium text-slate-800">
           영수증 보호 암호
           <ReceiptPassphraseInput value={password} onChange={value => {

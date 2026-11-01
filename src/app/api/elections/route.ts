@@ -9,6 +9,7 @@ import { cleanVoters, votersFromEmails } from "@/lib/voters";
 import type { ElectionStatus } from "@/lib/types";
 import { checkSmsTitle } from "@/lib/sms-title";
 import { normalizeElection } from "@/lib/utils";
+import { electionPeriodError } from "@/lib/election-period";
 import { canViewElection } from "@/lib/election-view-access";
 
 export const dynamic = "force-dynamic";
@@ -133,6 +134,8 @@ export async function POST(request: Request) {
     if (!endsAt) {
       return jsonError("투표 마감 일시를 입력해주세요.", 400, "invalid_period");
     }
+    const periodError = electionPeriodError(startsAt, endsAt);
+    if (periodError) return jsonError(periodError, 400, "invalid_period");
 
     const result = await createBilledElection({
       contentRestricted: body.contentRestricted !== false,

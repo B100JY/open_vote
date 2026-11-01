@@ -35,7 +35,7 @@ export async function GET(
     }
 
     if (!await canViewElection(request, data)) {
-      return NextResponse.json({restricted:true,election:{id:data.id,name:data.name,content_restricted:true}},{headers:{"Cache-Control":"private, no-store"}});
+      return NextResponse.json({restricted:true,election:{id:data.id,name:data.name,content_restricted:true,auth_mode: ["sms_token", "email_link", "member_session"].includes(data.auth_mode ?? "") ? data.auth_mode : null}},{headers:{"Cache-Control":"private, no-store"}});
     }
     // 집계 수치만 노출한다(익명성 유지: 표 내용/후보별 득표 비노출).
     //  - cast_count : 총 투표수(ballots) — 연동 앱의 "수정/삭제 가능" 판단에 사용.

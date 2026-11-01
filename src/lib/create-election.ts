@@ -4,6 +4,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { getServiceSupabase } from "@/lib/supabase/server";
 import type { NewVoter } from "@/lib/voters";
 import { CANDIDATE_ID_PATTERN } from "@/lib/ballot";
+import { electionPeriodError } from "@/lib/election-period";
 import type { BallotRules, Candidate } from "@/lib/types";
 
 type Json = Database["app_open_vote"]["Tables"]["elections"]["Row"]["candidates"];
@@ -91,6 +92,8 @@ export { cleanCandidatesInput };
 export async function createBilledElection(
   input: CreateElectionInput,
 ): Promise<CreateElectionResult> {
+  const periodError = electionPeriodError(input.startsAt, input.endsAt);
+  if (periodError) return { ok: false, status: 400, error: "invalid_period", message: periodError };
   const name = input.name.trim();
   if (!name) {
     return { ok: false, status: 400, error: "invalid_name", message: "투표명을 입력해주세요." };

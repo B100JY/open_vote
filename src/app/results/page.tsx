@@ -13,6 +13,7 @@ import { formatDate, percentage, statusLabel, statusTone } from "@/lib/utils";
 type ResultsResponse = {
   election: Election;
   results: ElectionResults | null;
+  access_scope?: "public" | "restricted";
   message?: string;
 };
 
@@ -139,6 +140,13 @@ export default function ResultsPage({ simulation }: { simulation?: ResultsRespon
               </select>
             </div>
           </Panel>
+
+          {!simulation && results && data?.access_scope === "restricted" ? (
+            <p role="note" className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+              <strong>내부 공개 투표</strong> — 이 브라우저에는 이전에 투표 링크나 코드 등으로 확인한 열람 권한이 있어 결과를 볼 수 있습니다.
+              열람 권한은 최대 12시간 동안 유지됩니다. 이후 다시 보거나 다른 브라우저에서 결과를 보려면 투표 코드 또는 문자로 받은 개인 투표 링크로 다시 인증해야 합니다.
+            </p>
+          ) : null}
 
           {!results ? (
             <EmptyState

@@ -103,7 +103,9 @@ test("비밀번호로 잠근 영수증은 공개 JSON에서 선택 해시가 보
   }
   assert.rejects(()=>unlockReceipt(parsed,"wrong password"));
   const changed=structuredClone(parsed);
-  changed.encrypted.data=changed.encrypted.data.slice(0,-1)+(changed.encrypted.data.endsWith("A")?"B":"A");
+  // Base64URL 마지막 글자의 사용하지 않는 비트를 바꾸면 실제 암호문이 같을 수 있다.
+  // 첫 글자를 변경해야 AES-GCM 위변조 검증을 확실하게 테스트할 수 있다.
+  changed.encrypted.data=(changed.encrypted.data.startsWith("A")?"B":"A")+changed.encrypted.data.slice(1);
   await assert.rejects(()=>unlockReceipt(changed,password));
   const swapped=structuredClone(parsed);
   swapped.audit.commitment="0".repeat(64);

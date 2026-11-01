@@ -21,6 +21,7 @@ import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
 import { SMS_TITLE_MAX, defaultSmsTitle } from "@/lib/sms-title";
 import type { ElectionDuplicateTemplate } from "@/lib/election-duplicate";
+import { electionPeriodError } from "@/lib/election-period";
 import { BALLOT_TYPES, cleanBallotRules, describeBallotRules, hasApprovalAnswerOptions } from "@/lib/ballot";
 import type { BallotType, Candidate, CreditsSummary, Election, VoterRegistry } from "@/lib/types";
 import { csvEscape, formatDate } from "@/lib/utils";
@@ -172,6 +173,7 @@ function AdminCreateForm() {
   const [contentRestricted, setContentRestricted] = useState(true);
   const [smsRequired, setSmsRequired] = useState(false);
   const [period, setPeriod] = useState(defaultPeriod);
+  const periodError = period.start && period.end ? electionPeriodError(new Date(period.start), new Date(period.end)) : null;
   const [credits, setCredits] = useState<CreditsSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -351,6 +353,7 @@ function AdminCreateForm() {
       if (!rulesCheck.ok) {
         throw new Error(rulesCheck.message);
       }
+      if (periodError) throw new Error(periodError);
       // 마감이 지난 시각인지는 서버(create_billed_election)가 확인한다
       if (duplicateSource && (!period.start || !period.end)) {
         throw new Error("복제한 투표의 시작 및 마감 일시를 새로 지정해주세요.");
@@ -665,11 +668,15 @@ function AdminCreateForm() {
                 <span className="text-sm font-medium text-slate-700">투표 마감</span>
                 <input
                   type="datetime-local"
-                  className="h-11 rounded-lg border border-[var(--border)] bg-white px-3 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+                  min={period.start || undefined}
+                  aria-invalid={!!periodError}
+                  aria-describedby={periodError ? "election-period-error" : undefined}
+                  className={`h-11 rounded-lg border bg-white px-3 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 ${periodError ? "border-red-500" : "border-[var(--border)]"}`}
                   value={period.end}
                   onChange={(event) => setPeriod((current) => ({ ...current, end: event.target.value }))}
                 />
               </label>
+              {periodError ? <p id="election-period-error" role="alert" className="text-sm font-medium text-red-700 sm:col-span-2">{periodError}</p> : null}
               <p className="text-xs text-slate-500 sm:col-span-2">
                 시작 전에는 링크를 열어도 투표할 수 없고, 마감 시각이 지나면 선거가 자동으로 종료되어 결과가 공개됩니다.
               </p>
@@ -860,7 +867,7 @@ function AdminCreateForm() {
 
             <Button
               onClick={submit}
-              disabled={loading || duplicateLoading}
+              disabled={loading || duplicateLoading || !!periodError}
               className="w-full sm:w-fit"
             >
               <CheckCircle2 size={18} aria-hidden="true" />

@@ -49,7 +49,33 @@ export function ElectionHub({ electionId }: { electionId: string }) {
   }
 
   const { election } = data;
-  if (data.restricted) return <div className="mx-auto grid max-w-xl gap-4">{back}<Panel className="grid gap-4 p-6"><h1 className="text-2xl font-semibold">{election.name}</h1><p className="text-sm leading-6 text-slate-600">내용과 결과를 보려면 문자로 받은 투표 링크를 열거나 투표 코드를 입력해주세요.</p><CodeEntry compact /><Link href={`/vote/${election.id}/auth`} className="text-sm text-blue-700 underline">이메일·회원 투표 링크로 로그인하기</Link></Panel></div>;
+  if (data.restricted) {
+    const emailAccess = election.auth_mode === "email_link" || election.auth_mode === "member_session";
+    return (
+      <div className="mx-auto grid max-w-xl gap-4">
+        {back}
+        <Panel className="grid gap-4 p-6">
+          <h1 className="text-2xl font-semibold">{election.name}</h1>
+          <p className="text-sm leading-6 text-slate-600">
+            <strong className="font-semibold text-slate-900">내부 공개 투표입니다.</strong>{" "}
+            투표 내용과 결과는 등록된 유권자에게만 공개됩니다.
+          </p>
+          {emailAccess ? (
+            <Link href={`/vote/${election.id}/auth`} className="text-sm font-medium text-blue-700 underline">
+              이메일·회원 인증으로 투표 열기
+            </Link>
+          ) : (
+            <>
+              <p className="text-sm leading-6 text-slate-600">
+                문자로 받은 개인 투표 링크를 열거나 아래에 투표 코드를 입력해주세요.
+              </p>
+              <CodeEntry compact />
+            </>
+          )}
+        </Panel>
+      </div>
+    );
+  }
   const id = encodeURIComponent(election.id);
   const isPublic = election.status === "active" || election.status === "closed";
   const closed = election.status === "closed";
