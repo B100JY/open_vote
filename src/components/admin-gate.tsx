@@ -125,6 +125,7 @@ export function AdminGate({ children, adminOnly = false }: { children: React.Rea
         구글 계정으로 시작하기
       </a>
       {error ? <div className="mt-4"><Alert>{error}</Alert></div> : null}
+      {process.env.NODE_ENV === "development" ? <p className="mt-4 text-sm leading-6 text-slate-600">로컬 개발 서버에서는 같은 PC의 터미널에서 <code className="rounded bg-slate-100 px-1.5 py-1 font-mono text-xs">npm run dev:admin-login</code>을 실행하면 기존 총괄 관리자 계정으로 로그인할 수 있습니다. 별도 Google OAuth 설정은 필요하지 않습니다.</p> : null}
     </Panel>
   );
 }

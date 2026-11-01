@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { CheckCircle2, Copy, Download, Home, Info, LayoutDashboard, ShieldCheck } from "lucide-react";
-import { RECEIPT_STORAGE_KEY, formatReceiptForCopy, parseSavedReceipt, receiptLabel, type SavedReceipt } from "@/lib/vote-receipt";
+import { AlertTriangle, CheckCircle2, Copy, Download, Home, Info, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { RECEIPT_STORAGE_KEY, formatReceiptForCopy, parseSavedReceipt, type SavedReceipt } from "@/lib/vote-receipt";
 import { downloadReceipt } from "@/lib/receipt-file";
 import { Alert, Button, Panel } from "@/components/ui";
 
@@ -48,7 +48,7 @@ export function VoteCompleteScreen({ preview = false, simulatedReceipt, onSimula
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
-      setCopyError("영수증을 복사하지 못했습니다. 화면의 영수증 해시를 직접 선택해 복사해주세요.");
+      setCopyError("안전한 확인증을 복사하지 못했습니다. 접수 서명이 준비됐는지 확인해주세요.");
     }
   }
 
@@ -72,43 +72,52 @@ export function VoteCompleteScreen({ preview = false, simulatedReceipt, onSimula
         </p>
 
         {receipt ? (
-          <div className="mt-6 rounded-lg border border-[var(--border)] bg-slate-50 p-4 text-left">
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-950">
-              <ShieldCheck size={18} aria-hidden="true" />
-              검증용 영수증 · 선택 사항
+          <details className="mt-6 rounded-xl border border-[var(--border)] bg-slate-50 text-left">
+            <summary className="cursor-pointer select-none px-4 py-4 text-sm font-semibold text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
+              <span className="inline-flex items-center gap-2"><ShieldCheck size={18} aria-hidden="true" />검증용 영수증 보기 (선택)</span>
+              <span className="mt-1 block pl-7 text-xs font-normal leading-5 text-slate-500">검증이 필요한 경우에만 펼쳐서 확인하세요. 저장하지 않아도 투표는 완료됩니다.</span>
+            </summary>
+            <div className="border-t border-slate-200 px-4 pb-5 pt-4">
+              <div role="note" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
+                <AlertTriangle size={19} className="mt-0.5 shrink-0" aria-hidden="true" />
+                <span><strong>주의: 확인증은 다른 사람에게 보내지 마세요.</strong> 새 확인증에는 선택 결과를 알아낼 수 있는 값이 포함되지 않지만, 개인 접수 증빙은 본인만 보관하는 것이 안전합니다. 과거 방식의 영수증은 선택을 추적할 수 있습니다.</span>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-slate-700">
+                검증용 영수증은 선택 사항입니다. 나중에 서명된 접수 기록이 공개 원장에 포함되었는지 확인하려는 경우에만 저장하세요.
+              </p>
+              {receipt.audit ? (
+                <Button variant="secondary" className="mt-4 w-full" disabled={preview} onClick={() => {
+                  try { downloadReceipt(receipt); setCopyError(""); }
+                  catch { setCopyError("확인증을 안전하게 저장하지 못했습니다."); }
+                }}>
+                  <Download size={17} aria-hidden="true" /> {receipt.audit.witness ? "선택 정보를 제외한 접수 확인증 저장" : "서명 대기 확인증 저장"}
+                </Button>
+              ) : <div className="mt-4"><Alert tone="info">이 투표는 이전 검증 방식입니다. 기존 영수증은 공개 원장에서 선택을 알아낼 수 있어 개인정보 보호를 위해 내려받기를 제한합니다.</Alert></div>}
+              {receipt.audit && !receipt.audit.witness ? <p className="mt-2 text-xs leading-5 text-slate-500">접수 서명은 아직 준비 중입니다. 서명 대기 확인증을 보관한 후 공개 검증에서 이어받을 수 있습니다.</p> : null}
+              {receipt.audit ? <p className="mt-3 text-xs leading-5 text-slate-600">나중에 검증하려면 이 화면을 닫기 전에 확인증을 저장하세요. 재발급은 제공되지 않으며, 저장하지 않아도 투표 접수와 결과에는 영향이 없습니다.</p> : null}
+              <details className="mt-4 border-t border-slate-200 pt-4">
+                <summary className="cursor-pointer text-sm font-medium text-blue-700"><Info size={16} className="mr-1 inline" aria-hidden="true" />영수증은 어디에 쓰나요?</summary>
+                <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
+                  <p>선거 종료 후 ‘공개 검증’에서 확인증과 공개 기록을 비교하면 서명된 접수 기록이 남아 있는지 확인할 수 있습니다.</p>
+                  <p>선택을 추적할 수 있는 해시·Salt·비밀값은 새 확인증 파일에서 제외합니다. 따라서 파일만 유출되어도 공개 원장에서 어떤 항목을 선택했는지 연결할 수 없도록 했습니다.</p>
+                  <p><strong>검증 범위:</strong> 접수 서명과 포함 여부를 확인하며, 이 파일만으로 내가 선택한 내용이 그대로 집계되었는지까지 증명하지는 못합니다.</p>
+                </div>
+              </details>
+              <details className="mt-4 border-t border-slate-200 pt-4">
+                <summary className="cursor-pointer text-sm text-slate-600">자세한 검증 정보</summary>
+                <dl className="mt-3 grid gap-3 text-xs">
+                  <ReceiptRow label="선거" value={receipt.electionName || receipt.electionId} />
+                  {receipt.audit?.commitment ? <ReceiptRow label="접수 약정" value={receipt.audit.commitment} mono /> : null}
+                  {receipt.contextHash ? <ReceiptRow label="투표 항목 기준값" value={receipt.contextHash} mono /> : null}
+                </dl>
+                {receipt.audit?.witness ? <Button className="mt-4 w-full" variant="secondary" disabled={preview} onClick={copyReceipt}>
+                  <Copy size={17} aria-hidden="true" />{copied ? "복사됨" : "접수 확인증 복사"}
+                </Button> : null}
+              </details>
+              {copyError ? <p role="alert" className="mt-3 text-sm text-red-700">{copyError}</p> : null}
             </div>
-            <p className="mt-3 font-mono text-2xl font-semibold tracking-wide text-blue-700">{receiptLabel(receipt)}</p>
-            <p className="mt-2 text-sm font-medium leading-6 text-slate-700">영수증을 저장하지 않아도 투표는 정상적으로 완료되었습니다. 나중에 내 표를 검증하고 싶을 때만 내려받으세요.</p>
-            <Button variant="secondary" className="mt-4 w-full" disabled={preview} onClick={() => downloadReceipt(receipt)}>
-              <Download size={17} aria-hidden="true" /> 검증용 영수증 저장 (선택)
-            </Button>
-            <Link href="/trust/verification" target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm text-blue-700 underline"><Info size={16} aria-hidden="true" />영수증은 어디에 쓰나요? (새 탭)</Link>
-            <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-slate-600">자세한 검증 정보</summary>
-            <dl className="mt-3 grid gap-3 text-xs">
-              <ReceiptRow label="선거" value={receipt.electionName || receipt.electionId} />
-              <ReceiptRow label="영수증 해시" value={receipt.receiptHash} mono />
-              <ReceiptRow label="검증 Salt" value={receipt.salt} mono />
-              {receipt.contextHash ? <ReceiptRow label="투표 항목 기준값" value={receipt.contextHash} mono /> : null}
-            </dl>
-            <Button className="mt-4 w-full" variant="secondary" disabled={preview} onClick={copyReceipt}>
-              <Copy size={17} aria-hidden="true" />
-              {copied ? "복사됨" : "영수증 복사"}
-            </Button>
-            </details>
-            {copyError ? <p role="alert" className="mt-3 text-sm text-red-700">{copyError}</p> : null}
-          </div>
+          </details>
         ) : null}
-
-        {receipt?.audit && !receipt.audit.witness ? <div className="mt-4"><Alert tone="info">투표는 접수됐지만 접수 서명은 준비 중입니다. 같은 탭의 개인 링크에서 ‘접수 확인증 이어받기’를 눌러 다시 저장할 수 있습니다.</Alert></div> : null}
-        {receipt ? <div className="mt-5 text-left">
-          <Alert tone="info">
-            나중에 내 표를 검증하려면 이 창을 닫기 전에 영수증을 저장하세요. 재발급은 되지 않으며, 화면의 짧은 번호만으로는 복구할 수 없습니다. 저장하지 않아도 투표 접수와 결과에는 영향이 없습니다.
-          </Alert>
-          <p className="mt-3 text-sm leading-6 text-slate-500">
-            영수증을 다른 사람에게 공유하면 선거 종료 후 그 사람이 내 선택 내용을 확인할 수 있습니다. 영수증은 본인만 보관해주세요.
-          </p>
-        </div> : null}
 
         <div className="mt-8 grid gap-2 sm:grid-cols-2">
           <Link

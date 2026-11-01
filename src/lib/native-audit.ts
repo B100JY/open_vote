@@ -1,4 +1,5 @@
 import canonicalize from "canonicalize";
+import type { VerificationReceipt } from "./vote-receipt.ts";
 import type { Election, ElectionResults, PublicBallotLedger, CandidateResult } from "./types.ts";
 
 export const HEX = /^[a-f0-9]{64}$/;
@@ -74,7 +75,7 @@ export function recount(manifest: Manifest, ballots: PublicBallotLedger["ballots
   return { election_id: e.id, ballot_type: e.ballot_type, min_choices: e.min_choices, max_choices: e.max_choices, total_ballots: ballots.length, blank_ballots: blank, valid_ballots: valid, candidates };
 }
 
-export async function verifyBundle(bundle: AuditBundle, receipt?: { electionId: string; receiptHash: string; salt: string; audit?: AuditReceipt }, anchor?: AuditAnchor): Promise<AuditCheck[]> {
+export async function verifyBundle(bundle: AuditBundle, receipt?: VerificationReceipt, anchor?: AuditAnchor): Promise<AuditCheck[]> {
   const checks: AuditCheck[] = [];
   const add = (check: string, ok: boolean, detail: string) => checks.push({ check, status: ok ? "PASS" : "FAIL", detail });
   try {
@@ -114,10 +115,15 @@ export async function verifyBundle(bundle: AuditBundle, receipt?: { electionId: 
     add("TALLY_RECOUNT", canonical(expected) === canonical(published), "공개 표를 별도 구현으로 재계산");
     if (receipt?.audit) {
       const a = receipt.audit;
-      const c = await commitment(receipt.electionId, mh, receipt.receiptHash, a.secret);
-      add("OWN_COMMITMENT", receipt.electionId === m.election.id && c === a.commitment && commitments.has(c), "로컬 비밀값과 약정 포함 확인");
-      const mine = sorted.find(b => b.receipt_hash === receipt.receiptHash);
-      add("OWN_BALLOT", !!mine && await digest(`${receipt.electionId}|${mine.selection}|${receipt.salt}`) === receipt.receiptHash, "내 공개 표와 영수증 대조");
+      const privacy = "format" in receipt;
+      const c = privacy ? a.commitment : await commitment(receipt.electionId, mh, receipt.receiptHash, receipt.audit!.secret);
+      add("OWN_COMMITMENT", receipt.electionId === m.election.id && c === a.commitment && commitments.has(c), privacy ? "서명된 접수 약정의 공개 기록 포함 확인" : "로컬 비밀값과 약정 포함 확인");
+      if (privacy) {
+        checks.push({ check: "OWN_BALLOT", status: "UNCONFIRMED", detail: "개인정보 보호형 확인증에는 선택과 연결되는 값이 없어 내 선택 내용 자체는 대조할 수 없습니다." });
+      } else {
+        const mine = sorted.find(b => b.receipt_hash === receipt.receiptHash);
+        add("OWN_BALLOT", !!mine && await digest(`${receipt.electionId}|${mine.selection}|${receipt.salt}`) === receipt.receiptHash, "내 공개 표와 영수증 대조");
+      }
       if (a.witness) {
         const ev = bundle.events.find(e => e.index === a.witness!.payload.index);
         const valid = await verifySignature(a.witness, m) && a.witness.payload.head === await eventHead(a.witness.payload) && a.witness.payload.payload.commitment === c && a.witness.payload.electionId === m.election.id && a.witness.payload.manifestHash === mh && a.witness.payload.kind === "vote";

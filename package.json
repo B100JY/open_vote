@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --port 3100",
     "dev2": "next dev --port 3200",
+    "dev:admin-login": "node --env-file=.env.local scripts/dev-admin-login.mjs",
     "build": "next build",
     "start": "next start --port 3100",
     "lint": "eslint",

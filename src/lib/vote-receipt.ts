@@ -52,8 +52,115 @@ export function parseSavedReceipt(raw: string | null): SavedReceipt | null {
   }
 }
 
+/** 선택한 항목을 유추할 수 있는 공개 표 식별자와 비밀값이 없는 공유 방어형 확인증. */
+export type PrivacyReceipt = {
+  format: "moai-inclusion-receipt-v1";
+  electionId: string;
+  electionName: string;
+  audit: Pick<AuditReceipt, "commitment" | "manifest" | "witness">;
+};
+
+export type VerificationReceipt = SavedReceipt | PrivacyReceipt;
+
+/** 공개 원장이 평문 표와 영수증 해시를 연결하므로, 그 해시·Salt·secret은 내보내지 않는다. */
+export function toPrivacyReceipt(receipt: SavedReceipt): PrivacyReceipt {
+  if (!receipt.audit) throw new Error("접수 약정이 없는 이전 영수증은 보호형 파일로 만들 수 없습니다.");
+  const original = receipt.audit.manifest;
+  const manifest = original.payload;
+  const election = manifest.election;
+  // 서버/저장소 객체를 통째로 복사하지 않는다. 예상하지 못한 private 필드도 유출되지 않게 허용 필드만 직렬화한다.
+  const publicKey = manifest.publicKey;
+  const safeManifest: AuditReceipt["manifest"] = {
+    keyId: original.keyId,
+    signature: original.signature,
+    payload: {
+      format: "moai-manifest-v1",
+      election: {
+        id: election.id,
+        name: election.name,
+        description: election.description,
+        candidates: election.candidates.map(candidate => ({
+          id: candidate.id,
+          name: candidate.name,
+          ...(candidate.description !== undefined ? { description: candidate.description } : {}),
+        })),
+        ballot_type: election.ballot_type,
+        min_choices: election.min_choices,
+        max_choices: election.max_choices,
+        allow_blank: election.allow_blank,
+        starts_at: election.starts_at,
+        ends_at: election.ends_at,
+      },
+      electorate: manifest.electorate,
+      smsRequired: manifest.smsRequired,
+      singleCast: true,
+      publicKey: { kty: publicKey.kty, crv: publicKey.crv, x: publicKey.x, y: publicKey.y,
+        ...(publicKey.ext !== undefined ? { ext: publicKey.ext } : {}),
+        ...(publicKey.key_ops !== undefined ? { key_ops: publicKey.key_ops } : {}) },
+      keyId: manifest.keyId,
+    },
+  };
+  const originalWitness = receipt.audit.witness;
+  const safeWitness: AuditReceipt["witness"] = originalWitness ? {
+    keyId: originalWitness.keyId,
+    signature: originalWitness.signature,
+    payload: {
+      format: originalWitness.payload.format,
+      electionId: originalWitness.payload.electionId,
+      manifestHash: originalWitness.payload.manifestHash,
+      index: originalWitness.payload.index,
+      kind: originalWitness.payload.kind,
+      payload: { commitment: receipt.audit.commitment },
+      previous: originalWitness.payload.previous,
+      head: originalWitness.payload.head,
+    },
+  } : undefined;
+  return {
+    format: "moai-inclusion-receipt-v1",
+    electionId: receipt.electionId,
+    electionName: receipt.electionName,
+    audit: {
+      commitment: receipt.audit.commitment,
+      manifest: safeManifest,
+      witness: safeWitness,
+    },
+  };
+}
+
+export function parseVerificationReceipt(raw: string | null): VerificationReceipt | null {
+  if (!raw) return null;
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (value && typeof value === "object" && !Array.isArray(value) && "format" in value) {
+      const r = value as Record<string, unknown>;
+      if (r.format !== "moai-inclusion-receipt-v1" ||
+        typeof r.electionId !== "string" || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(r.electionId) ||
+        typeof r.electionName !== "string" || !r.audit || typeof r.audit !== "object" || Array.isArray(r.audit)) return null;
+      const a = r.audit as Record<string, unknown>;
+      if (typeof a.commitment !== "string" || !/^[a-f0-9]{64}$/.test(a.commitment) ||
+        !a.manifest || typeof a.manifest !== "object" || (a.witness !== undefined && (!a.witness || typeof a.witness !== "object"))) return null;
+      const manifest = a.manifest as AuditReceipt["manifest"];
+      const witness = a.witness as AuditReceipt["witness"];
+      if (manifest.payload?.format !== "moai-manifest-v1" || manifest.payload.election?.id !== r.electionId ||
+        (witness !== undefined && (witness.payload?.kind !== "vote" || witness.payload.electionId !== r.electionId ||
+        witness.payload.payload?.commitment !== a.commitment))) return null;
+      return {
+        format: "moai-inclusion-receipt-v1",
+        electionId: r.electionId,
+        electionName: r.electionName,
+        audit: { commitment: a.commitment, manifest, witness },
+      };
+    }
+  } catch { return null; }
+  return parseSavedReceipt(raw);
+}
+
+export function isPrivacyReceipt(receipt: VerificationReceipt): receipt is PrivacyReceipt {
+  return "format" in receipt && receipt.format === "moai-inclusion-receipt-v1";
+}
+
 export function formatReceiptForCopy(receipt: SavedReceipt) {
-  if (receipt.audit) return JSON.stringify(receipt);
+  if (receipt.audit) return JSON.stringify(toPrivacyReceipt(receipt));
   return [
     `election_id=${receipt.electionId}`,
     `receipt_hash=${receipt.receiptHash}`,

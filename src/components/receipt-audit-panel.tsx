@@ -5,8 +5,8 @@ import type { AuditBundle } from "@/lib/native-audit";
 import { useState, type ChangeEvent } from "react";
 import { Download, FileCheck } from "lucide-react";
 import { Alert, Button, Panel } from "@/components/ui";
-import { auditReceiptEvidence, makeAuditRecord, parseReceiptFile, withCheckpoint, type AuditResult } from "@/lib/receipt-audit";
-import { downloadReceipt, downloadTextFile } from "@/lib/receipt-file";
+import { auditReceiptEvidence, makeAuditRecord, parseReceiptFile, type AuditResult } from "@/lib/receipt-audit";
+import { downloadTextFile } from "@/lib/receipt-file";
 import { receiptLabel, type SavedReceipt } from "@/lib/vote-receipt";
 import type { Election, PublicBallotLedger } from "@/lib/types";
 
@@ -48,15 +48,13 @@ function LegacyReceiptAuditPanel({ election, ledger }: { election: Election; led
         <p className="font-mono text-sm text-slate-500">영수증 {receiptLabel(receipt)}</p>
         <Alert tone={result.valid ? "success" : "danger"}>{result.message}</Alert>
         {!receipt.contextHash ? <p className="text-sm text-slate-500">이전 버전 영수증으로 내 표의 선택을 확인합니다. 투표 당시 항목의 기준값은 포함되어 있지 않습니다.</p> : null}
-        {result.valid ? <Button variant="secondary" onClick={() => downloadReceipt(withCheckpoint(receipt, result))}>
-          <Download size={17} aria-hidden="true" /> 마감 기록을 담은 영수증 저장
-        </Button> : null}
+        {result.valid ? <Alert tone="info">이전 영수증은 공개 원장의 선택 내용과 연결될 수 있습니다. 새 영수증의 안전한 저장 형식이 적용되지 않아, 기존 영수증을 다시 저장하거나 공유하는 기능은 제공하지 않습니다.</Alert> : null}
       </div> : null}
       <div className="border-t border-slate-200 pt-4">
         <Button variant="secondary" onClick={() => downloadTextFile(`모아이투표-${election.id.slice(0, 8)}-투표기록.json`, JSON.stringify(makeAuditRecord(election, ledger)))}>
           <Download size={17} aria-hidden="true" /> 투표 기록 파일 받기
         </Button>
-        <p className="mt-2 text-sm leading-6 text-slate-500">저장한 영수증 파일을 직접 열어 이 기록 파일을 선택하면, 인터넷 연결 없이도 같은 검사를 할 수 있습니다. 영수증은 본인만 보관하세요.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-500">이전에 저장한 영수증으로 인터넷 연결 없이 검사할 수 있습니다. 오래된 파일에는 선택을 추적할 수 있는 값이 있으므로 다른 사람에게 공유하지 마세요.</p>
       </div>
     </Panel>
   );

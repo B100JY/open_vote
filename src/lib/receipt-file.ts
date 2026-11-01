@@ -1,5 +1,5 @@
 import { auditReceiptEvidence } from "./receipt-audit.ts";
-import { receiptLabel, type SavedReceipt } from "./vote-receipt.ts";
+import { receiptLabel, toPrivacyReceipt, isPrivacyReceipt, type VerificationReceipt, type SavedReceipt } from "./vote-receipt.ts";
 
 /** 파일 내용·개인 영수증은 URL, API, 분석 로그로 전송하지 않는다. */
 export function downloadTextFile(filename: string, text: string, type = "application/json") {
@@ -57,10 +57,17 @@ document.getElementById("save").addEventListener("click",()=>{
 </script></body></html>`;
 }
 
-export function downloadReceipt(receipt: SavedReceipt) {
-  if (receipt.audit) {
-    downloadTextFile(`모아이투표-${receiptLabel(receipt)}-서명확인증.json`, JSON.stringify(receipt));
+export function downloadReceipt(receipt: VerificationReceipt) {
+  if (isPrivacyReceipt(receipt)) {
+    downloadTextFile(`모아이투표-${receipt.audit.commitment.slice(0, 8)}-접수확인증.json`, JSON.stringify(receipt));
     return;
   }
-  downloadTextFile(`모아이투표-${receiptLabel(receipt)}${receipt.checkpoint ? "-마감" : ""}-영수증.html`, createReceiptHtml(receipt), "text/html;charset=utf-8");
+  if (receipt.audit) {
+    const safe = toPrivacyReceipt(receipt);
+    downloadTextFile(`모아이투표-${safe.audit.commitment.slice(0, 8)}-접수확인증.json`, JSON.stringify(safe));
+    return;
+  }
+  // 기존 방식은 평문 공개 원장과 receiptHash가 연결되어 있어 안전한 확인증을 만들 수 없다.
+  // 이 경로에서 비밀투표를 누설할 수 있는 파일을 저장하지 않는다.
+  throw new Error("이전 방식 영수증은 선택 정보가 유추될 수 있어 파일로 저장하지 않습니다.");
 }

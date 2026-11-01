@@ -1,5 +1,5 @@
 import { verifyBundle, type AuditBundle, type AuditAnchor } from "./native-audit.ts";
-import { parseSavedReceipt } from "./vote-receipt.ts";
+import { parseVerificationReceipt } from "./vote-receipt.ts";
 const input = (id: string) => document.getElementById(id) as HTMLInputElement;
 async function read(id: string, max: number) {
   const file=input(id).files?.[0]; if(!file)return undefined;
@@ -12,7 +12,7 @@ document.getElementById("verify")!.addEventListener("click",async()=>{
   try{
     const bundle=await read("bundle",64_000_000), rawReceipt=await read("receipt",1_000_000), rawAnchor=await read("anchor",1_000_000);
     if(!bundle)throw new Error("공개 검증 파일을 선택해주세요.");
-    const receipt=rawReceipt?parseSavedReceipt(rawReceipt):undefined;
+    const receipt=rawReceipt?parseVerificationReceipt(rawReceipt):undefined;
     if(rawReceipt&&!receipt)throw new Error("개인 확인증 형식을 확인해주세요.");
     const anchor=rawAnchor?JSON.parse(rawAnchor) as AuditAnchor:undefined;
     const checks=await verifyBundle(JSON.parse(bundle) as AuditBundle,receipt??undefined,anchor);

@@ -105,6 +105,34 @@ npm run dev
 
 기본 개발 서버는 [http://localhost:3100](http://localhost:3100) 입니다.
 
+### 로컬 PC의 총괄 관리자 로그인
+
+모아이투표는 Google 로그인을 별도 OAuth 클라이언트로 처리합니다. 로컬 `.env.local`에
+`GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`이 없으면 로컬 Google 로그인은
+`not_configured` 오류를 표시합니다. 운영 OAuth 비밀키를 복사할 필요는 없습니다.
+
+개발 서버를 실행한 상태에서 **같은 Windows PC의 신뢰할 수 있는 터미널**에서 아래 명령을 실행하세요.
+
+```bash
+npm run dev:admin-login -- --check
+npm run dev:admin-login
+```
+
+첫 번째 명령은 로컬 서버 및 기존 관리자 계정을 확인만 하고, 두 번째 명령은 **기존 Supabase OpenVote
+총괄 관리자 계정**의 일회용 매직링크 해시를 발급해 기본 브라우저의
+`http://localhost:3100/admin`으로 전달합니다. Google OAuth 설정이 없어도 작동하며,
+운영 DB에 관리자 계정을 새로 만들거나 권한을 바꾸지 않습니다. 인증 해시는 주소의 fragment로
+전달하고 브라우저에서 즉시 지웁니다. **명령 출력에는 토큰·메일·비밀키를 표시하지 않습니다.**
+
+3200 포트 개발 서버에서는 `npm run dev:admin-login -- --port 3200`을 사용하세요.
+여러 관리자 계정이 있다면 `--email 관리자메일주소` 옵션으로 본인 계정을 지정합니다.
+
+이 기능은 로컬 Windows PC + 개발 환경 + `.env.local`에 서버 서비스 키를 가진 개발자만
+사용하도록 제한됩니다. **관리자 권한을 가진 실제 운영 계정으로 접속하므로**, 테스트 중 운영
+선거·명부·포인트를 변경할 수 있습니다. 관리자 테스트실의 모의 선거를 이용하고 실제 데이터
+변경은 피하세요. 다른 사람의 PC, 공유 서버, CI에서는 실행하지 마세요.
+
+
 ## 빌드 검증
 
 ```bash
