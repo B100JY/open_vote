@@ -1,288 +1,188 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Info, Lock, RefreshCw, Search, ShieldCheck, XCircle } from "lucide-react";
-import { Alert, Badge, Button, EmptyState, Field, Panel } from "@/components/ui";
+import { useState } from "react";
+import { CheckCircle2, FileCheck2, ShieldCheck, XCircle } from "lucide-react";
+import { Alert, Button, Panel } from "@/components/ui";
+import { ReceiptPassphraseInput } from "@/components/receipt-passphrase-input";
 import { fetchJson } from "@/lib/client-fetch";
-import { CodeEntry } from "@/components/code-entry";
-import { pickElectionId } from "@/lib/election-search";
-import type { Election, PublicBallotLedger } from "@/lib/types";
 import { describeSelection } from "@/lib/ballot";
-import { normalizeReceiptInput, verifyLedger } from "@/lib/verification";
-import { ReceiptAuditPanel } from "@/components/receipt-audit-panel";
-import type { AuditBundle } from "@/lib/native-audit";
-import type { SavedReceipt } from "@/lib/vote-receipt";
+import { isProtectedReceipt, parseVerificationReceipt } from "@/lib/vote-receipt";
+import { unlockReceipt } from "@/lib/protected-receipt";
+import { verifyBundle, type AuditBundle, type AuditCheck } from "@/lib/native-audit";
 
-type LedgerResponse = {
-  election: Election;
-  ledger: PublicBallotLedger | null;
-  message?: string;
+type SimulatedSource = {
+  election: { id: string; name: string };
 };
 
-/** 모의 데이터 주입 시에도 실제 검증 화면과 SHA-256 원장 검사 함수를 그대로 실행한다. */
-export default function VerifyPage({ simulation, initialReceipt = "", simulatedBundle, simulatedReceipt }: { simulation?: LedgerResponse; initialReceipt?: string; simulatedBundle?: AuditBundle; simulatedReceipt?: SavedReceipt }) {
-  const [elections, setElections] = useState<Election[]>(simulation ? [simulation.election] : []);
-  const [selectedElectionId, setSelectedElectionId] = useState(simulation?.election.id ?? "");
-  const [ledger, setLedger] = useState<PublicBallotLedger | null>(simulation?.ledger ?? null);
-  const [ledgerElection, setLedgerElection] = useState<Election | null>(simulation?.election ?? null);
-  const [receiptQuery, setReceiptQuery] = useState(initialReceipt);
-  const [chainStatus, setChainStatus] = useState<{
-    valid: boolean;
-    reason: string | null;
-  } | null>(null);
-  const [loading, setLoading] = useState(!simulation);
+/**
+ * 실선거·모의선거에서 같은 검증 UI/암호 해제·서명 검증 코드 사용.
+ * 로컬 JSON과 비밀번호를 서버로 보내지 않고 공개 원장만 내려받는다.
+ */
+export default function VerifyPage({ simulation, simulatedBundle }: {
+  simulation?: SimulatedSource;
+  simulatedBundle?: AuditBundle;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [password, setPassword] = useState("");
+  const [checks, setChecks] = useState<AuditCheck[] | null>(null);
+  const [selection, setSelection] = useState("");
+  const [electionName, setElectionName] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const receipt = normalizeReceiptInput(receiptQuery);
-  const matchedBallot = useMemo(() => {
-    if (!receipt || !ledger) {
-      return null;
-    }
-
-    return ledger.ballots.find((ballot) => ballot.receipt_hash === receipt) ?? null;
-  }, [ledger, receipt]);
-
-  async function loadElections() {
-    if (simulation) return simulation.election.id;
-    const data = await fetchJson<{ elections: Election[] }>(
-      "/api/elections?visibility=public",
-    );
-    setElections(data.elections);
-    const first = pickElectionId(data.elections, window.location.search);
-    setSelectedElectionId((current) => current || first);
-    return selectedElectionId || first;
-  }
-
-  async function loadLedger(id: string) {
-    if (simulation) {
-      setLedgerElection(simulation.election);
-      setLedger(simulation.ledger);
-      setChainStatus(simulation.ledger ? await verifyLedger(simulation.ledger.ballots, simulation.ledger.ledger_hash) : null);
-      return;
-    }
-    if (!id) {
-      setLedger(null);
-      return;
-    }
-
-    const data = await fetchJson<LedgerResponse>(`/api/elections/${id}/ledger`);
-    setLedgerElection(data.election);
-    setLedger(data.ledger);
-    setChainStatus(data.ledger ? await verifyLedger(data.ledger.ballots, data.ledger.ledger_hash) : null);
-  }
-
-  async function refresh() {
-    if (simulation) { await loadLedger(simulation.election.id); return; }
-    setLoading(true);
+  function resetResults() {
+    setChecks(null);
+    setSelection("");
+    setElectionName("");
     setError("");
+  }
+
+  async function handleVerify() {
+    resetResults();
+    if (!file) { setError("저장한 영수증 JSON 파일을 선택해 주세요."); return; }
+    setBusy(true);
     try {
-      const id = await loadElections();
-      await loadLedger(selectedElectionId || id);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "검증 데이터를 불러오지 못했습니다.");
+      if (file.size > 1_000_000) throw new Error("영수증 파일은 1MB 이하만 사용할 수 있습니다.");
+      const parsed = parseVerificationReceipt(await file.text());
+      if (!parsed || !isProtectedReceipt(parsed)) throw new Error("암호화 영수증 JSON 파일을 선택해 주세요.");
+      if (simulation && parsed.electionId !== simulation.election.id) {
+        throw new Error("이 모의 선거의 영수증이 아닙니다. 이 테스트실에서 내려받은 파일을 선택해 주세요.");
+      }
+      if (!password) throw new Error("영수증을 저장할 때 정한 암호를 입력해 주세요.");
+      if (!parsed.audit.witness) throw new Error("접수 서명이 없는 영수증입니다. 투표 완료 화면에서 다시 저장해 주세요.");
+
+      const unlocked = await unlockReceipt(parsed, password);
+      // A signed, public receipt witness grants access to closed-election verification data.
+      // The password, choice, receiptHash and salt stay in the browser.
+      const bundle = simulatedBundle ?? await fetchJson<AuditBundle>(
+        `/api/elections/${encodeURIComponent(parsed.electionId)}/receipt-bundle`,
+        {
+          method: "POST",
+          cache: "no-store",
+          body: JSON.stringify({ witness: parsed.audit.witness }),
+        },
+      );
+
+      if (bundle.manifest?.payload?.election.id !== parsed.electionId) {
+        throw new Error("영수증과 공개 기록의 선거가 다릅니다.");
+      }
+      const results = await verifyBundle(bundle, unlocked);
+      const ownCheck = results.find(item => item.check === "OWN_BALLOT");
+      if (ownCheck?.status === "PASS" && "receiptHash" in unlocked) {
+        const ballot = bundle.ledger.ballots.find(item => item.receipt_hash === unlocked.receiptHash);
+        if (ballot) setSelection(describeSelection(ballot.selection, bundle.manifest.payload.election.candidates));
+      }
+      setElectionName(bundle.manifest.payload.election.name);
+      setChecks(results);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "파일과 암호를 확인하고 다시 시도해 주세요.");
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
-  useEffect(() => {
-    if (!simulation) void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!selectedElectionId) {
-      return;
-    }
-
-    loadLedger(selectedElectionId).catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "검증 데이터를 불러오지 못했습니다.");
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedElectionId]);
+  const own = checks?.find(item => item.check === "OWN_BALLOT");
+  const witnessed = checks?.find(item => item.check === "OWN_WITNESS");
+  const record = checks?.find(item => item.check === "HISTORY_AND_LEDGER");
+  const recount = checks?.find(item => item.check === "TALLY_RECOUNT");
+  const signature = checks?.find(item => item.check === "FINAL_SIGNATURE");
+  const failed = checks?.filter(item => item.status === "FAIL") ?? [];
+  const allChecked = Boolean(checks && own?.status === "PASS"
+    && record?.status === "PASS" && recount?.status === "PASS"
+    && signature?.status === "PASS" && witnessed?.status === "PASS" && !failed.length);
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-950">공개 투표 검증</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {simulation ? "모의 공개 원장을 실제 검증 함수로 검사합니다. 운영 원장이나 서명 검증을 대신하지 않습니다." : "투표 종료 후 공개 원장에서 내 영수증을 찾고, 원장 해시를 브라우저에서 다시 계산해 확인합니다."}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            href="/trust"
-            className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            <Info size={18} aria-hidden="true" />
-            기술 원리
-          </Link>
-          <Button variant="secondary" onClick={refresh} disabled={loading}>
-            <RefreshCw size={18} aria-hidden="true" />
-            새로고침
-          </Button>
-        </div>
+    <div className="mx-auto grid max-w-xl gap-5">
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-950">투표 검증</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">
+          저장한 영수증과 암호로 내 표가 공개 기록에 그대로 남아 있는지 확인합니다.
+        </p>
+        {simulation ? <p className="mt-2 text-xs text-blue-700">모의 선거: 실제 투표와 같은 검증 기능을 임시 데이터로 시험합니다.</p> : null}
       </div>
 
-      {error ? <Alert>{error}</Alert> : null}
-      {error.includes("투표 코드") ? <Panel className="p-5"><CodeEntry compact /></Panel> : null}
-
-      {loading ? (
-        <Panel className="p-6">
-          <div className="h-7 w-40 animate-pulse rounded bg-slate-200" />
-          <div className="mt-6 h-3 w-full animate-pulse rounded bg-slate-100" />
-        </Panel>
-      ) : elections.length === 0 ? (
-        <EmptyState
-          icon={<ShieldCheck size={28} aria-hidden="true" />}
-          title="검증 가능한 선거가 없습니다"
-          description="진행 중이거나 종료된 선거가 있으면 공개 ledger를 확인할 수 있습니다."
-        />
-      ) : (
-        <>
-          <Panel className="p-5">
-            <div className="grid gap-4 md:grid-cols-[1fr_260px] md:items-end">
-              <Field
-                label="영수증 해시 검색"
-                value={receiptQuery}
-                onChange={(event) => setReceiptQuery(event.target.value)}
-                placeholder="64자리 해시 또는 복사한 영수증 전체"
-                hint="투표 완료 화면에서 복사한 영수증 전체를 붙여넣어도 됩니다."
-              />
-              <label className="grid gap-2">
-                <span className="text-sm font-medium text-slate-700">선거</span>
-                <select
-                  className="h-11 rounded-lg border border-[var(--border)] bg-white px-3 text-sm outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
-                  value={selectedElectionId}
-                  onChange={(event) => setSelectedElectionId(event.target.value)}
-                >
-                  {elections.map((election) => (
-                    <option key={election.id} value={election.id}>
-                      {election.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </Panel>
-
-          {!ledger ? (
-            <EmptyState
-              icon={<Lock size={28} aria-hidden="true" />}
-              title="투표가 끝나면 공개 원장이 열립니다"
-              description="진행 중에 원장을 공개하면 표가 쌓이는 순서로 누가 무엇을 찍었는지 추정할 수 있어 종료 후에만 공개합니다."
+      <Panel className="grid gap-4 p-5">
+        <div className="grid gap-2 text-sm font-medium text-slate-800">
+          <span>영수증 JSON 파일</span>
+          <label className="group flex min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2">
+            <input
+              type="file"
+              accept=".json,application/json"
+              aria-label="영수증 JSON 파일 선택"
+              onChange={event => {
+                setFile(event.target.files?.[0] ?? null);
+                resetResults();
+              }}
+              className="sr-only"
             />
-          ) : (
-            <>
-              {ledgerElection ? <ReceiptAuditPanel key={`${ledgerElection.id}:${ledger.ledger_hash}`} election={ledgerElection} ledger={ledger} simulatedBundle={simulatedBundle} simulatedReceipt={simulatedReceipt} /> : null}
-              <div className="grid gap-3 md:grid-cols-3">
-                <StatusCard
-                  label="원장 투표수"
-                  value={`${ledger.ballot_count}건`}
-                  icon={<Search size={22} aria-hidden="true" />}
-                />
-                <StatusCard
-                  label="원장 해시 검증"
-                  value={chainStatus?.valid ? "정상" : "오류"}
-                  icon={
-                    chainStatus?.valid ? (
-                      <CheckCircle2 size={22} aria-hidden="true" />
-                    ) : (
-                      <XCircle size={22} aria-hidden="true" />
-                    )
-                  }
-                  tone={chainStatus?.valid ? "success" : "danger"}
-                />
-                <StatusCard
-                  label="원장 해시"
-                  value={ledger.ledger_hash.slice(0, 12)}
-                  icon={<ShieldCheck size={22} aria-hidden="true" />}
-                />
-              </div>
+            <span className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg border border-slate-400 bg-white px-4 font-semibold text-slate-800 shadow-sm group-hover:bg-slate-100">
+              파일 선택
+            </span>
+            <span
+              className={`min-w-0 flex-1 truncate text-sm font-normal ${file ? "text-slate-800" : "text-slate-500"}`}
+              title={file?.name ?? "선택된 파일 없음"}
+              aria-live="polite"
+            >
+              {file?.name ?? "선택된 파일 없음"}
+            </span>
+          </label>
+        </div>
+        <label className="grid gap-1 text-sm font-medium text-slate-800">
+          영수증 보호 암호
+          <ReceiptPassphraseInput value={password} onChange={value => {
+            setPassword(value);
+            resetResults();
+          }} placeholder="영수증 저장 시 설정한 암호" />
+        </label>
+        <Button disabled={busy} onClick={() => void handleVerify()}>
+          <FileCheck2 size={18} aria-hidden="true" />{busy ? "검증 중…" : "검증하기"}
+        </Button>
+        <p className="text-xs leading-5 text-slate-500">영수증과 암호는 이 기기에서만 확인하며 서버로 보내지 않습니다.</p>
+      </Panel>
 
-              {receiptQuery.trim() ? (
-                !receipt ? (
-                  <Alert>영수증 형식을 확인해주세요. 64자리 영수증 해시 또는 완료 화면에서 복사한 영수증 전체를 입력해주세요.</Alert>
-                ) : matchedBallot ? (
-                  <Alert tone="success">
-                    영수증을 찾았습니다. 원장에 기록된 선택은 &ldquo;
-                    {describeSelection(matchedBallot.selection, ledgerElection?.candidates ?? [])}
-                    &rdquo;입니다. 내가 고른 것과 같은지 확인하세요.
-                  </Alert>
-                ) : (
-                  <Alert>공개 원장에서 이 영수증 해시를 찾지 못했습니다.</Alert>
-                )
-              ) : null}
-
-              {chainStatus && !chainStatus.valid ? <Alert>원장 검증 실패: {chainStatus.reason}</Alert> : null}
-
-              <Panel className="overflow-hidden">
-                <div className="border-b border-[var(--border)] p-4">
-                  <h2 className="text-lg font-semibold">공개 원장</h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    영수증 해시 순서로 정렬되어 있어 투표한 순서는 알 수 없습니다. 전체 해시: {ledger.ledger_hash}
-                  </p>
-                </div>
-                <div className="max-h-[520px] overflow-auto">
-                  <table className="w-full min-w-[640px] text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-500">
-                      <tr>
-                        <th className="px-4 py-3 font-medium">영수증 해시</th>
-                        <th className="px-4 py-3 font-medium">선택</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ledger.ballots.map((ballot) => (
-                        <tr key={ballot.receipt_hash} className="border-t border-[var(--border)]">
-                          <td className="px-4 py-3 font-mono text-xs">{ballot.receipt_hash}</td>
-                          <td className="px-4 py-3">
-                            {describeSelection(ballot.selection, ledgerElection?.candidates ?? [])}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </Panel>
-            </>
-          )}
-        </>
-      )}
+      {error ? <Alert>{error}</Alert> : null}
+      {checks ? (
+        <Panel className="grid gap-4 p-5" aria-live="polite">
+          <div className="flex items-center gap-2">
+            {allChecked ? <CheckCircle2 className="text-emerald-700" size={24} aria-hidden="true" />
+              : failed.length ? <XCircle className="text-red-700" size={24} aria-hidden="true" />
+              : <ShieldCheck className="text-amber-600" size={24} aria-hidden="true" />}
+            <h2 className="text-lg font-semibold">
+              {allChecked ? "내 표와 공개 기록이 일치합니다" : failed.length ? "검증에서 불일치를 발견했습니다" : "일부 항목은 확인되지 않았습니다"}
+            </h2>
+          </div>
+          <p className="text-sm text-slate-600">{electionName}</p>
+          <div className="grid gap-3 text-sm">
+            <ResultRow label="내 표" status={own?.status} detail={own?.status === "PASS" ? "내 표가 원장에 있고 선택이 일치합니다." : "내 선택을 확인할 수 없습니다."} />
+            {selection && own?.status === "PASS" ? <p className="rounded-lg bg-slate-50 p-3 text-slate-800">기록된 선택: <strong>{selection}</strong></p> : null}
+            <ResultRow label="접수 기록" status={witnessed?.status} detail="투표 당시의 서명과 공개 기록 비교" />
+            <ResultRow label="전체 기록·집계" status={
+              record?.status === "FAIL" || recount?.status === "FAIL" || signature?.status === "FAIL" ? "FAIL"
+                : record?.status === "PASS" && recount?.status === "PASS" && signature?.status === "PASS" ? "PASS" : "UNCONFIRMED"
+            } detail="원장 변경 여부와 집계 수치 확인" />
+          </div>
+          {failed.length ? <Alert>일치하지 않는 검사: {failed.map(item => item.check).join(", ")}</Alert> : null}
+          <p className="text-xs leading-5 text-slate-500">이 검사는 공개 자료의 일치를 확인하지만, 서버 해킹 등으로 인한 모든 부정을 완전히 증명하거나 완벽히 배제하지는 않습니다.</p>
+        </Panel>
+      ) : null}
     </div>
   );
 }
 
-function StatusCard({
-  label,
-  value,
-  icon,
-  tone = "default",
-}: {
+function ResultRow({ label, status, detail }: {
   label: string;
-  value: string;
-  icon: React.ReactNode;
-  tone?: "default" | "success" | "danger";
+  status: AuditCheck["status"] | undefined;
+  detail: string;
 }) {
-  const toneClass =
-    tone === "success"
-      ? "bg-emerald-50 text-emerald-700"
-      : tone === "danger"
-        ? "bg-red-50 text-red-700"
-        : "bg-blue-50 text-blue-700";
-
   return (
-    <Panel className="p-5">
-      <div className="flex items-center gap-3">
-        <span className={`flex h-11 w-11 items-center justify-center rounded-lg ${toneClass}`}>
-          {icon}
-        </span>
-        <div>
-          <Badge>{label}</Badge>
-          <div className="mt-2 break-all text-xl font-semibold text-slate-950">{value}</div>
-        </div>
+    <div className="flex items-start gap-3 rounded-lg border border-slate-200 p-3">
+      {status === "PASS" ? <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-700" aria-hidden="true" />
+        : status === "FAIL" ? <XCircle size={20} className="mt-0.5 shrink-0 text-red-700" aria-hidden="true" />
+        : <ShieldCheck size={20} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />}
+      <div className="grid gap-1">
+        <p className="font-semibold">{label}: {status === "PASS" ? "정상" : status === "FAIL" ? "불일치" : "미확인"}</p>
+        <p className="text-xs leading-5 text-slate-600">{detail}</p>
       </div>
-    </Panel>
+    </div>
   );
 }

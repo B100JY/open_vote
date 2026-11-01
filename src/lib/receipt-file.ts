@@ -1,5 +1,5 @@
 import { auditReceiptEvidence } from "./receipt-audit.ts";
-import { receiptLabel, toPrivacyReceipt, isPrivacyReceipt, type VerificationReceipt, type SavedReceipt } from "./vote-receipt.ts";
+import { receiptLabel, toPrivacyReceipt, isPrivacyReceipt, isProtectedReceipt, type VerificationReceipt, type SavedReceipt } from "./vote-receipt.ts";
 
 /** 파일 내용·개인 영수증은 URL, API, 분석 로그로 전송하지 않는다. */
 export function downloadTextFile(filename: string, text: string, type = "application/json") {
@@ -58,6 +58,10 @@ document.getElementById("save").addEventListener("click",()=>{
 }
 
 export function downloadReceipt(receipt: VerificationReceipt) {
+  if (isProtectedReceipt(receipt)) {
+    downloadTextFile(`모아이투표-${receipt.audit.commitment.slice(0, 8)}-암호화영수증.json`, JSON.stringify(receipt));
+    return;
+  }
   if (isPrivacyReceipt(receipt)) {
     downloadTextFile(`모아이투표-${receipt.audit.commitment.slice(0, 8)}-접수확인증.json`, JSON.stringify(receipt));
     return;

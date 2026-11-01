@@ -146,7 +146,7 @@ export function MockElectionLab() {
       </div> : null}
       {tab === "complete" && receipt ? <VoteCompleteScreen key={receipt.receiptHash} simulatedReceipt={receipt} onSimulatedVerify={() => setTab("verify")} onSimulatedBallot={() => setTab("ballot")}/> : null}
       {tab === "results" && snapshot ? <ResultsPage key={`results-${ballots.length}`} simulation={{ election:snapshot, results:mockElectionResults(snapshot,ballots) }}/> : null}
-      {tab === "verify" && snapshot && ledger && bundle ? <VerifyPage key={`verify-${ledger.ledger_hash}`} simulation={{ election:snapshot, ledger }} initialReceipt={receipt?.receiptHash ?? ""} simulatedBundle={bundle} simulatedReceipt={receipt ?? undefined}/> : null}
+      {tab === "verify" && snapshot && ledger && bundle ? <VerifyPage key={`verify-${ledger.ledger_hash}`} simulation={{ election:snapshot }} simulatedBundle={bundle}/> : null}
       <p className="flex items-center gap-2 text-xs text-slate-500"><ShieldCheck size={16}/>모든 결과는 합성 데이터입니다. 브라우저 새로고침 시 테스트 내용은 초기화됩니다.</p>
     </>}
   </div>;

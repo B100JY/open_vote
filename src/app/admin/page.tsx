@@ -20,6 +20,7 @@ import { ElectionPreview, CREATION_LOCK_NOTICE } from "@/components/election-pre
 import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
 import { SMS_TITLE_MAX, defaultSmsTitle } from "@/lib/sms-title";
+import type { ElectionDuplicateTemplate } from "@/lib/election-duplicate";
 import { BALLOT_TYPES, cleanBallotRules, describeBallotRules, hasApprovalAnswerOptions } from "@/lib/ballot";
 import type { BallotType, Candidate, CreditsSummary, Election, VoterRegistry } from "@/lib/types";
 import { csvEscape, formatDate } from "@/lib/utils";
@@ -176,6 +177,8 @@ function AdminCreateForm() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<CreateResponse | null>(null);
+  const [duplicateLoading, setDuplicateLoading] = useState(false);
+  const [duplicateSource, setDuplicateSource] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -195,6 +198,53 @@ function AdminCreateForm() {
       cancelled = true;
     };
   }, [created]);
+
+  useEffect(() => {
+    const sourceId = new URLSearchParams(window.location.search).get("duplicate");
+    if (!sourceId) return;
+    let cancelled = false;
+    setDuplicateLoading(true);
+    setError("");
+    (async () => {
+      try {
+        const response = await fetchJson<{ template: ElectionDuplicateTemplate }>(
+          `/api/elections/${encodeURIComponent(sourceId)}/duplicate`,
+          { headers: await authHeaders() },
+        );
+        if (cancelled) return;
+        const template = response.template;
+        setName(template.name);
+        setOrganizationName(template.organizationName);
+        setDescription(template.description);
+        setDescriptionPublic(template.descriptionPublic);
+        setSmsTitle(template.smsTitle);
+        setVoterMode(template.voterMode);
+        setVoterPhones("");
+        setVoterEmails("");
+        setCandidateName("");
+        setCandidates(template.candidates.map(candidate => ({
+          ...createOption(candidate.name),
+          ...(candidate.description ? { description: candidate.description } : {}),
+        })));
+        setSelectedPresetId("custom");
+        setBallotType(template.ballotType);
+        setMinChoices(template.minChoices);
+        setMaxChoices(template.maxChoices);
+        setAllowBlank(template.allowBlank);
+        setEnableAudit(template.enableAudit);
+        setSmsRequired(template.smsRequired);
+        setContentRestricted(template.contentRestricted);
+        // Force the creator to choose dates; never carry the original period.
+        setPeriod({ start: "", end: "" });
+        setDuplicateSource(template.name);
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : "원본 투표 설정을 불러오지 못했습니다.");
+      } finally {
+        if (!cancelled) setDuplicateLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const phoneParse = useMemo(() => parsePhoneLines(voterPhones), [voterPhones]);
 
@@ -270,6 +320,7 @@ function AdminCreateForm() {
   }
 
   async function submit() {
+    if (duplicateLoading) return;
     setLoading(true);
     setError("");
 
@@ -301,6 +352,9 @@ function AdminCreateForm() {
         throw new Error(rulesCheck.message);
       }
       // 마감이 지난 시각인지는 서버(create_billed_election)가 확인한다
+      if (duplicateSource && (!period.start || !period.end)) {
+        throw new Error("복제한 투표의 시작 및 마감 일시를 새로 지정해주세요.");
+      }
       if (!period.end) {
         throw new Error("투표 마감 일시를 입력해주세요.");
       }
@@ -331,6 +385,10 @@ function AdminCreateForm() {
   }
 
   function reset() {
+    setDuplicateSource("");
+    if (window.location.search.includes("duplicate=")) {
+      window.history.replaceState(window.history.state, "", "/admin");
+    }
     setName("");
     setOrganizationName("");
     setDescriptionPublic(false);
@@ -342,10 +400,14 @@ function AdminCreateForm() {
     setCandidateName("");
     setCandidates([]);
     setSelectedPresetId("custom");
+    setVoterMode("sms");
     setBallotType("single");
     setMinChoices(1);
     setMaxChoices(1);
     setAllowBlank(false);
+    setEnableAudit(true);
+    setSmsRequired(false);
+    setContentRestricted(true);
     setPeriod(defaultPeriod());
     setError("");
     setCreated(null);
@@ -495,6 +557,17 @@ function AdminCreateForm() {
 
         <Panel className="p-5 sm:p-7">
           <div className="grid gap-5">
+            {duplicateLoading ? (
+              <Alert tone="info">원본 투표 설정을 불러오는 중입니다…</Alert>
+            ) : duplicateSource ? (
+              <Alert tone="info">
+                <strong>‘{duplicateSource}’ 설정을 불러왔습니다.</strong>
+                <span className="mt-1 block">
+                  제목·후보/안건·투표 방식·공개 설정을 확인하세요. 유권자 명부와 시작·마감 일시는 복제하지 않았으므로 새로 입력해야 합니다.
+                  아직 새 투표는 생성되지 않았습니다.
+                </span>
+              </Alert>
+            ) : null}
             <h2 className="form-section-title"><span>01</span> 기본 정보</h2>
             <Field
               label="투표명"
@@ -787,7 +860,7 @@ function AdminCreateForm() {
 
             <Button
               onClick={submit}
-              disabled={loading}
+              disabled={loading || duplicateLoading}
               className="w-full sm:w-fit"
             >
               <CheckCircle2 size={18} aria-hidden="true" />

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { voteErrorStatus } from "../vote-status.ts";
+import { publicVoteFailure, voteErrorStatus } from "../vote-status.ts";
 
 test("이미 투표한 경우(중복 투표 방지) 409를 반환한다", () => {
   assert.equal(voteErrorStatus("already_voted"), 409);
@@ -40,4 +40,16 @@ test("선택 규칙 위반은 400이다(무차별 대입 카운트 제외 기준
   assert.equal(voteErrorStatus("choice_count"), 400);
   assert.equal(voteErrorStatus("blank_not_allowed"), 400);
   assert.equal(voteErrorStatus("incomplete_selection"), 400);
+});
+
+test("재발급·중복투표의 공개 실패 응답에서 명부와 참여 여부가 구별되지 않는다", () => {
+  const unknown=publicVoteFailure("invalid_token","코드 없음");
+  const registered=publicVoteFailure("already_voted","이미 투표했습니다");
+  const notRegistered=publicVoteFailure("not_registered","명부에 없습니다");
+  const expired=publicVoteFailure("token_expired","유효기간 만료");
+  assert.deepEqual(unknown,registered);
+  assert.deepEqual(unknown,notRegistered);
+  assert.deepEqual(unknown,expired);
+  assert.equal(registered.message.includes("투표했습니다"),false);
+  assert.equal(registered.error,"vote_unavailable");
 });

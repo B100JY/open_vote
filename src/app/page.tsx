@@ -93,7 +93,7 @@ export default function HomePage() {
         )}
       </section>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* <div className="grid grid-cols-2 gap-3">
         <Link
           href="/trust"
           className="inline-flex min-h-12 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
@@ -108,11 +108,11 @@ export default function HomePage() {
           <ClipboardList size={18} aria-hidden="true" />
           투표 생성
         </Link>
-      </div>
-
+      </div> */}
+      <br></br>
       <p className="text-center text-xs leading-5 text-slate-400">
         <Vote className="mr-1 inline" size={14} aria-hidden="true" />
-        투표에 참여할 때는 가입이 필요 없습니다.
+        투표에 참여만 할 때는 가입이 필요 없습니다.
         <span className="mx-2">·</span>
         <Link href="/privacy" className="underline underline-offset-2">
           개인정보처리방침

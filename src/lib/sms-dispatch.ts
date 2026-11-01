@@ -81,9 +81,23 @@ export async function sendVoteInviteSms({ electionId, baseUrl, dryRun = false, r
         }
         if (!rotated) { summary.stopped = "투표 코드 준비에 실패했습니다."; break; }
       }
-      const eligible = dryRun ? chunk : chunk.filter(t => previous.some(p => p.id === t.voter.id));
+      let eligible = dryRun ? chunk : chunk.filter(t => previous.some(p => p.id === t.voter.id));
       await settle(chunk.filter(t => !eligible.includes(t)).map(t => ({ id: dispatch.get(t.voter.id)!, state: "failed" })));
       if (!eligible.length) continue;
+      if (!dryRun) {
+        // A ballot may have been cast after the first targets query and token rotation.
+        // Re-read the immutable cast flag just before the external SMS call.
+        const { data: outstanding, error: recheckError } = await db.from("voter_registry")
+          .select("id").in("id", eligible.map(t => t.voter.id)).eq("has_voted", false);
+        if (recheckError) throw new Error("발송 직전 투표 상태를 확인하지 못했습니다.");
+        const stillEligible = new Set((outstanding ?? []).map(row => row.id));
+        const cancelled = eligible.filter(t => !stillEligible.has(t.voter.id));
+        if (cancelled.length) {
+          await settle(cancelled.map(t => ({ id: dispatch.get(t.voter.id)!, state: "failed" })));
+          eligible = eligible.filter(t => stillEligible.has(t.voter.id));
+        }
+        if (!eligible.length) continue;
+      }
       let batch;
       try {
         batch = await sendNotifierBatch({ ...config, template: format === "compact" ? COMPACT_TEMPLATE : config.template }, { dryRun, recipients: eligible.map(({ voter, token, code }): NotifierRecipient => ({ phone: voter.phone, ref: voter.id, variables: format === "compact" ? { title, code: formatVoterCode(code) } : { title, name: voter.voter_name?.trim() || "유권자", url: `${baseUrl}/v/${token}`, code: formatVoterCode(code) } })) });

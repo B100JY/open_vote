@@ -3,7 +3,7 @@ import { getClientIp, jsonError } from "@/lib/api-response";
 import { recordFailedAttempt, checkRateLimit } from "@/lib/rate-limit";
 import { getServiceDbSupabase } from "@/lib/supabase/server";
 import { getVoterCodePepper, hashVoterCode, normalizeVoterCode } from "@/lib/voter-code";
-import { voteErrorStatus } from "@/lib/vote-status";
+import { publicVoteFailure, voteErrorStatus } from "@/lib/vote-status";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -58,11 +58,8 @@ export async function POST(request: Request) {
       if (voteErrorStatus(voteResult?.error) !== 400) {
         await recordFailedAttempt(ipAddress, endpoint);
       }
-      return jsonError(
-        voteResult?.message ?? "투표를 완료하지 못했습니다.",
-        voteErrorStatus(voteResult?.error),
-        voteResult?.error,
-      );
+      const publicFailure = publicVoteFailure(voteResult?.error, voteResult?.message);
+      return jsonError(publicFailure.message, publicFailure.status, publicFailure.error);
     }
 
     scheduleNotifications();

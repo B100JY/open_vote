@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { downloadTextFile } from "@/lib/receipt-file";
 import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
+  Copy,
   Download,
   Mail,
   MessageSquareText,
@@ -52,6 +53,7 @@ export default function ManageElectionsPage() {
 }
 
 function ManageElections() {
+  const router = useRouter();
   const allElections = usePathname() === "/admin/manage/elections";
   const [trash,setTrash] = useState(false);
   const [elections, setElections] = useState<Election[]>([]);
@@ -248,6 +250,14 @@ function ManageElections() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <Button
+                    variant="secondary"
+                    title="현재 투표의 설정만 복사합니다. 일정·명부·투표 결과는 가져오지 않습니다."
+                    onClick={() => router.push(`/admin?duplicate=${encodeURIComponent(election.id)}`)}
+                  >
+                    <Copy size={17} aria-hidden="true" />
+                    복제
+                  </Button>
                   <Button
                     variant="secondary"
                     onClick={() => downloadParticipants(election)}

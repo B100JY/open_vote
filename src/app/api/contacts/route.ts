@@ -162,6 +162,52 @@ export async function POST(request: Request) {
     );
   return NextResponse.json({ saved });
 }
+/**
+ * Update one contact-to-group relationship without replacing the contact's
+ * entire set of memberships (important for fast multi-select editing).
+ */
+export async function PATCH(request: Request) {
+  const auth = await requireVoteCreator(request);
+  if (!auth.ok) return jsonError(auth.message, auth.status);
+  const body = await request.json().catch(() => null);
+  const contactId = body?.contactId;
+  const groupId = body?.groupId;
+  const assigned = body?.assigned;
+  if (
+    typeof contactId !== "string" || !uuid.test(contactId) ||
+    typeof groupId !== "string" || !uuid.test(groupId) ||
+    typeof assigned !== "boolean"
+  ) return jsonError("연락처와 그룹을 확인해주세요.", 400);
+
+  const db = getServiceDbSupabase();
+  const owner = auth.user.user.id;
+  const [contact, group] = await Promise.all([
+    db.from("contacts").select("id").eq("owner_id", owner).eq("id", contactId).maybeSingle(),
+    db.from("contact_groups").select("id").eq("owner_id", owner).eq("id", groupId).maybeSingle(),
+  ]);
+  if (contact.error || group.error)
+    return jsonError("그룹 정보를 확인하지 못했습니다.", 503);
+  // Never allow a membership update across accounts even though service_role
+  // bypasses RLS. Both IDs must be owned by the authenticated creator.
+  if (!contact.data || !group.data)
+    return jsonError("연락처 또는 그룹을 찾을 수 없습니다.", 404);
+
+  const mutation = assigned
+    ? await db.from("contact_memberships")
+        .upsert(
+          { owner_id: owner, contact_id: contactId, group_id: groupId },
+          { onConflict: "contact_id,group_id", ignoreDuplicates: true },
+        )
+    : await db.from("contact_memberships")
+        .delete().eq("owner_id", owner).eq("contact_id", contactId).eq("group_id", groupId);
+  if (mutation.error)
+    return jsonError("그룹 소속을 변경하지 못했습니다. 다시 시도해주세요.", 409);
+  return NextResponse.json(
+    { success: true, contactId, groupId, assigned },
+    { headers: { "Cache-Control": "private, no-store" } },
+  );
+}
+
 export async function DELETE(request: Request) {
   const auth = await requireVoteCreator(request);
   if (!auth.ok) return jsonError(auth.message, auth.status);

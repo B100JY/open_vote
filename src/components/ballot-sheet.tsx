@@ -18,7 +18,6 @@ import { RECEIPT_STORAGE_KEY, type SavedReceipt } from "@/lib/vote-receipt";
 import { electionContextHash } from "@/lib/receipt-audit";
 import { commitment, hashObject, newSecret, verifySignature, eventHead, type Manifest, type Signed, type AuditEvent } from "@/lib/native-audit";
 import { fetchJson } from "@/lib/client-fetch";
-import { downloadReceipt } from "@/lib/receipt-file";
 import { parseSavedReceipt } from "@/lib/vote-receipt";
 
 export type BallotSheetElection = BallotRules & {
@@ -209,7 +208,7 @@ export function BallotSheet({
         <Button variant="secondary" onClick={requestOtp} disabled={otpBusy || submitting}>{otpBusy ? "발송 중" : challenge ? "인증번호 다시 받기" : "문자 인증번호 받기"}</Button>
         {challenge ? <label className="grid gap-2 text-sm">문자 인증번호<input className="rounded border border-slate-300 p-3" autoComplete="one-time-code" inputMode="numeric" maxLength={6} value={otp} onChange={e => setOtp(e.target.value.replace(/\D/g, ""))} /></label> : null}
       </div> : null}
-      {audited && error && hasPending ? <Button variant="secondary" onClick={() => downloadReceipt(pending.current!)}>접수 확인용 파일 저장</Button> : null}
+      {audited && error && hasPending ? <Alert tone="info">접수 처리 중 응답이 끊겼을 수 있습니다. 이 화면을 닫지 말고 같은 선택으로 다시 시도하거나, 개인 투표 링크의 ‘접수 확인증 이어받기’를 이용해 주세요.</Alert> : null}
 
       <div className="sticky bottom-4 grid gap-2 rounded-lg border border-[var(--border)] bg-white p-4 shadow-lg shadow-slate-300/30">
         {hint ? <p className="text-sm text-amber-700">{hint}</p> : null}

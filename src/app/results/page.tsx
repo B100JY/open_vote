@@ -168,7 +168,7 @@ export default function ResultsPage({ simulation }: { simulation?: ResultsRespon
                   : results.ballot_type === "rank"
                     ? `순위 점수는 1순위 ${results.max_choices}점, 그다음 순위마다 1점씩 낮게 매긴 합계입니다. `
                     : ""}
-                당선·가결 판단 기준(과반, 투표율 등)은 각 조합의 선거관리규정을 따릅니다.
+                {/* 당선·가결 판단 기준(과반, 투표율 등)은 각 조합의 선거관리규정을 따릅니다. */}
               </p>
             </>
           )}

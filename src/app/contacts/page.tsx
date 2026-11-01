@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { AdminGate } from "@/components/admin-gate";
 import { Alert, Button, Field, Panel, Textarea } from "@/components/ui";
 import { authHeaders } from "@/lib/client-auth";
 import { fetchJson } from "@/lib/client-fetch";
 import { ContactExcelImport } from "@/components/contact-excel-import";
+import { updateContactGroupIds } from "@/lib/contact-group-membership";
 import {
   mobileSmsUri,
   phoneBatches,
@@ -40,6 +41,7 @@ function Contacts() {
   const [device, setDevice] = useState({ mobile: false, ios: false });
   const [addOpen, setAddOpen] = useState(false);
   const [checkedContacts, setCheckedContacts] = useState<string[]>([]);
+  const [groupUpdating, setGroupUpdating] = useState("");
   const [editingGroup, setEditingGroup] = useState<{id: string; name: string} | null>(null);
   async function load() {
     const data = await fetchJson<{
@@ -74,6 +76,33 @@ function Contacts() {
       return false;
     } finally {
       setBusy(false);
+    }
+  }
+  async function changeContactGroup(contact: Contact, groupId: string, assigned: boolean) {
+    if (busy || groupUpdating) return;
+    setGroupUpdating(contact.id);
+    setError("");
+    setNotice("");
+    try {
+      await fetchJson("/api/contacts", {
+        method: "PATCH",
+        headers: await authHeaders(),
+        body: JSON.stringify({ contactId: contact.id, groupId, assigned }),
+      });
+      // The server changes one membership only; update the same one locally.
+      setContacts(current => current.map(item =>
+        item.id === contact.id
+          ? { ...item, groupIds: updateContactGroupIds(item.groupIds, groupId, assigned) }
+          : item,
+      ));
+      if (editing === contact.id) {
+        setMemberGroups(current => updateContactGroupIds(current, groupId, assigned));
+      }
+      setNotice(`${contact.name}님의 그룹 소속을 변경했습니다.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "그룹을 변경하지 못했습니다.");
+    } finally {
+      setGroupUpdating("");
     }
   }
   async function remove(ids: string[], kind: "group" | "contact") {
@@ -387,9 +416,32 @@ function Contacts() {
                   </p>
                   </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <details className="min-w-36 text-sm">
+                    <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-blue-600 [&::-webkit-details-marker]:hidden">
+                      그룹 선택 ({c.groupIds.length})
+                      <ChevronDown size={16} aria-hidden="true" />
+                    </summary>
+                    <fieldset
+                      disabled={busy || !!groupUpdating}
+                      className="mt-2 grid max-h-48 min-w-40 gap-1 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2"
+                      aria-label={`${c.name}의 소속 그룹 변경`}
+                    >
+                      {groups.length ? groups.map(g => (
+                        <label key={g.id} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md px-2 py-1 hover:bg-white">
+                          <input
+                            type="checkbox"
+                            checked={c.groupIds.includes(g.id)}
+                            onChange={event => void changeContactGroup(c, g.id, event.target.checked)}
+                            aria-label={`${c.name} · ${g.name} 그룹`}
+                          />
+                          <span className="break-words">{g.name}</span>
+                        </label>
+                      )) : <p className="px-2 py-1 text-slate-500">먼저 그룹을 만들어주세요.</p>}
+                    </fieldset>
+                  </details>
                   <button
-                    disabled={busy}
+                    disabled={busy || !!groupUpdating}
                     onClick={() => {
                       setAddOpen(true);
                       setEditing(c.id);
@@ -404,7 +456,7 @@ function Contacts() {
                     수정
                   </button>
                   <button
-                    disabled={busy}
+                    disabled={busy || !!groupUpdating}
                     onClick={() => void remove([c.id], "contact")}
                   >
                     삭제

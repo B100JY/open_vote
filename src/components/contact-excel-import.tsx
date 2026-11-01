@@ -9,7 +9,8 @@ import {
   type ImportColumns,
 } from "@/lib/contact-import";
 import type { ContactGroup } from "@/lib/mobile-sms";
-type Sheet = { sheet: string; data: unknown[][] };
+import { readHiddenExcelRows, skipHiddenContactRows } from "@/lib/contact-excel-hidden";
+type Sheet = { sheet: string; data: unknown[][]; hiddenRows: number };
 export function ContactExcelImport({
   groups,
   groupIds,
@@ -67,13 +68,30 @@ export function ContactExcelImport({
     try {
       const { default: readExcelFile } =
         await import("read-excel-file/browser");
-      const result = await readExcelFile(file);
+      const [result, hiddenRowsBySheet] = await Promise.all([
+        readExcelFile(file),
+        file.arrayBuffer().then(buffer => readHiddenExcelRows(new Uint8Array(buffer))),
+      ]);
       if (current !== revision.current) return;
-      if (!result.length || result.every((s) => !s.data.length))
+      const visibleSheets: Sheet[] = result.map(sheet => {
+        const hidden = hiddenRowsBySheet.get(sheet.sheet);
+        if (!hidden) throw new Error("시트의 숨김 행 정보를 확인할 수 없습니다.");
+        return {
+          sheet: sheet.sheet,
+          // Hidden rows remain as blanks so preview row numbers still match Excel.
+          data: skipHiddenContactRows(sheet.data, hidden),
+          hiddenRows: [...hidden].filter(number =>
+            number <= sheet.data.length && (sheet.data[number - 1] ?? []).some(cell =>
+              cell !== null && cell !== undefined && String(cell).trim() !== ""
+            )
+          ).length,
+        };
+      });
+      if (!visibleSheets.length || visibleSheets.every((s) => !s.data.length))
         throw new Error("빈 파일입니다.");
       if (
-        result.length > 30 ||
-        result.some(
+        visibleSheets.length > 30 ||
+        visibleSheets.some(
           (s) => s.data.length > 10000 || s.data.some((r) => r.length > 100),
         )
       )
@@ -84,9 +102,9 @@ export function ContactExcelImport({
         0,
         result.findIndex((s) => s.data.length),
       );
-      setSheets(result);
+      setSheets(visibleSheets);
       setSheetIndex(first);
-      setColumns(suggestContactColumns(result[first].data[0] ?? []));
+      setColumns(suggestContactColumns(visibleSheets[first].data[0] ?? []));
       setFilename(file.name);
     } catch (e) {
       if (current === revision.current)
@@ -211,6 +229,11 @@ export function ContactExcelImport({
               같은 번호는 이름이 갱신되고 기존 그룹은 유지됩니다. 중복{" "}
               {preview.duplicates}행은 한 명으로 합칩니다.
             </p>
+            {sheets[sheetIndex]?.hiddenRows ? (
+              <p className="mt-1 text-xs font-medium leading-5 text-blue-700">
+                엑셀에서 숨김 처리된 행 {sheets[sheetIndex].hiddenRows}개를 제외했습니다. 인원수는 유효한 번호와 중복 제거 결과를 기준으로 합니다.
+              </p>
+            ) : null}
             {!!preview.restored && (
               <p className="mt-2 text-sm text-blue-800">
                 앞자리 0·국가번호를 보정한 번호 {preview.restored}행이 있습니다.

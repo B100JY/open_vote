@@ -60,7 +60,19 @@ export type PrivacyReceipt = {
   audit: Pick<AuditReceipt, "commitment" | "manifest" | "witness">;
 };
 
-export type VerificationReceipt = SavedReceipt | PrivacyReceipt;
+export type ProtectedReceipt = Omit<PrivacyReceipt, "format"> & {
+  format: "moai-protected-receipt-v2";
+  encrypted: {
+    kdf: "PBKDF2-SHA256";
+    rounds: 310000;
+    salt: string;
+    cipher: "AES-256-GCM";
+    iv: string;
+    data: string;
+  };
+};
+
+export type VerificationReceipt = SavedReceipt | PrivacyReceipt | ProtectedReceipt;
 
 /** 공개 원장이 평문 표와 영수증 해시를 연결하므로, 그 해시·Salt·secret은 내보내지 않는다. */
 export function toPrivacyReceipt(receipt: SavedReceipt): PrivacyReceipt {
@@ -133,7 +145,7 @@ export function parseVerificationReceipt(raw: string | null): VerificationReceip
     const value: unknown = JSON.parse(raw);
     if (value && typeof value === "object" && !Array.isArray(value) && "format" in value) {
       const r = value as Record<string, unknown>;
-      if (r.format !== "moai-inclusion-receipt-v1" ||
+      if (!["moai-inclusion-receipt-v1", "moai-protected-receipt-v2"].includes(String(r.format)) ||
         typeof r.electionId !== "string" || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(r.electionId) ||
         typeof r.electionName !== "string" || !r.audit || typeof r.audit !== "object" || Array.isArray(r.audit)) return null;
       const a = r.audit as Record<string, unknown>;
@@ -144,6 +156,19 @@ export function parseVerificationReceipt(raw: string | null): VerificationReceip
       if (manifest.payload?.format !== "moai-manifest-v1" || manifest.payload.election?.id !== r.electionId ||
         (witness !== undefined && (witness.payload?.kind !== "vote" || witness.payload.electionId !== r.electionId ||
         witness.payload.payload?.commitment !== a.commitment))) return null;
+      if (r.format === "moai-protected-receipt-v2") {
+        const encrypted = r.encrypted as ProtectedReceipt["encrypted"] | undefined;
+        if (!encrypted || encrypted.kdf !== "PBKDF2-SHA256" || encrypted.rounds !== 310000 ||
+          encrypted.cipher !== "AES-256-GCM" || !/^[a-f0-9]{32}$/.test(encrypted.salt) ||
+          !/^[a-f0-9]{24}$/.test(encrypted.iv) ||
+          typeof encrypted.data !== "string" || !/^[A-Za-z0-9_-]{40,10000}$/.test(encrypted.data)) return null;
+        return {
+          format: "moai-protected-receipt-v2", electionId: r.electionId,
+          electionName: r.electionName, audit: { commitment: a.commitment, manifest, witness },
+          encrypted: { kdf: encrypted.kdf, rounds: encrypted.rounds, cipher: encrypted.cipher,
+            salt: encrypted.salt, iv: encrypted.iv, data: encrypted.data },
+        };
+      }
       return {
         format: "moai-inclusion-receipt-v1",
         electionId: r.electionId,
@@ -153,6 +178,10 @@ export function parseVerificationReceipt(raw: string | null): VerificationReceip
     }
   } catch { return null; }
   return parseSavedReceipt(raw);
+}
+
+export function isProtectedReceipt(receipt: VerificationReceipt): receipt is ProtectedReceipt {
+  return "format" in receipt && receipt.format === "moai-protected-receipt-v2";
 }
 
 export function isPrivacyReceipt(receipt: VerificationReceipt): receipt is PrivacyReceipt {

@@ -10,6 +10,22 @@ import type { Election } from "@/lib/types";
 
 type Quote = { count: number; balance: number; standard: number; compact: number; legacyCredit: number; prices: { standard: number; compact: number } };
 type Result = { sent?: number; failed?: number; skipped?: number; stopped?: string | null; cost?: number; refunded?: number; resendCount?: number | null; message?: string; uncertain?: boolean };
+
+const EXAMPLE_VALUES = new Set(["유권자", "개인링크", "ABC-012"]);
+
+/** 문자 본문은 그대로 유지하고, 수신자마다 달라지는 예시값만 화면에서 강조한다. */
+function SmsPreviewText({ message, title }: { message: string; title: string }) {
+  const header = `[모아이투표] ${title}`;
+  if (!message.startsWith(header)) return message;
+  return <>
+    {header}
+    {message.slice(header.length).split(/(유권자|개인링크|ABC-012)/g).map((part, index) =>
+      EXAMPLE_VALUES.has(part)
+        ? <span key={index} className="rounded bg-blue-100 px-1 py-0.5 font-semibold text-blue-800 ring-1 ring-blue-200">{part}</span>
+        : part
+    )}
+  </>;
+}
 export function SmsSendDialog({ election, resendAll = false, voterId, startBeforeSend = false, onStarted, onClose, onSent }: { election: Election; resendAll?: boolean; voterId?: string; startBeforeSend?: boolean; onStarted?: () => void; onClose: () => void; onSent: (result: Result) => void }) {
   const [format, setFormat] = useState<SmsFormat>("standard");
   const [title, setTitle] = useState(election.sms_title || election.name);
@@ -85,8 +101,15 @@ export function SmsSendDialog({ election, resendAll = false, voterId, startBefor
       <label className="block text-sm font-semibold">투표 제목<input value={title} maxLength={format==="compact"?36:30} disabled={sending||finished} onChange={e=>setTitle(e.target.value)} className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
       {format==="compact" ? <p className={`mt-1 text-sm ${check.ok ? "text-slate-500" : "text-red-600"}`}>제목 {smsBytes(previewTitle) ?? "지원 불가"}/36바이트 · 한글 최대 18자(영문·숫자 최대 36자)<br/>문자 전체 {smsBytes(preview) ?? "지원 불가"}/90바이트 · 초과하면 발송할 수 없습니다.</p> : <p className="mt-1 text-sm text-slate-500">제목 최대 30자</p>}
       {!check.ok ? <p role="alert" className="mt-2 text-sm text-red-600">{check.message}</p> : null}
-      <pre className="my-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-sans text-sm leading-relaxed">{preview}</pre>
-      <p className="mb-3 text-xs text-slate-500">수신자 이름·개인 링크·코드는 예시이며, 실제 발송 시 각 유권자의 정보로 바뀝니다.</p>
+      <pre className="my-4 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-4 font-sans text-sm leading-relaxed"><SmsPreviewText message={preview} title={previewTitle}/></pre>
+      <p className="mb-3 text-xs leading-6 text-slate-600">
+        <span className="font-semibold text-blue-800">파란색 값</span>은 예시이며, 실제 발송 시 수신자마다 다르게 바뀝니다:{" "}
+        {format === "standard" ? <>
+          <span className="font-semibold text-blue-800">유권자</span>(이름) ·{" "}
+          <span className="font-semibold text-blue-800">개인링크</span>(개인 링크) ·{" "}
+        </> : null}
+        <span className="font-semibold text-blue-800">ABC-012</span>(투표 코드)
+      </p>
       {quote ? <div className="mb-4 text-sm leading-6 text-slate-600"><p>대상 {quote.count}명 · 예상 발송비 {(quote.count*quote.prices[format]).toLocaleString()}P (1P=1원)</p><p>현재 잔액 {quote.balance.toLocaleString()}P · 지금 예약할 금액 {required.toLocaleString()}P</p>{quote.legacyCredit>0?<p>기존 선차감액 {quote.legacyCredit}P를 먼저 사용하고, 남는 차액은 발송 성공 후 반환합니다.</p>:null}<p>전체 비용을 먼저 예약하고 발송 실패분은 반환합니다. 재발송하면 이전 링크·코드는 무효화됩니다.</p></div> : null}
       {insufficient ? <Alert>포인트가 부족합니다. <Link className="underline" href="/credits">포인트 충전 안내</Link>에서 충전 후 다시 열어주세요.</Alert> : null}
       {error ? <Alert>{error}</Alert> : null}

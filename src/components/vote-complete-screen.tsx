@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Copy, Download, Home, Info, LayoutDashboard, ShieldCheck } from "lucide-react";
-import { RECEIPT_STORAGE_KEY, formatReceiptForCopy, parseSavedReceipt, type SavedReceipt } from "@/lib/vote-receipt";
+import { RECEIPT_STORAGE_KEY, parseSavedReceipt, type SavedReceipt } from "@/lib/vote-receipt";
+import { protectReceipt } from "@/lib/protected-receipt";
+import { ReceiptPassphraseInput } from "@/components/receipt-passphrase-input";
 import { downloadReceipt } from "@/lib/receipt-file";
 import { Alert, Button, Panel } from "@/components/ui";
 
@@ -21,6 +23,9 @@ export function VoteCompleteScreen({ preview = false, simulatedReceipt, onSimula
   const [copied, setCopied] = useState(false);
   const [ready, setReady] = useState(preview || !!simulatedReceipt);
   const [copyError, setCopyError] = useState("");
+  const [receiptPassword, setReceiptPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (preview || simulatedReceipt) return;
@@ -37,18 +42,43 @@ export function VoteCompleteScreen({ preview = false, simulatedReceipt, onSimula
     }
   }, [preview, simulatedReceipt]);
 
-  async function copyReceipt() {
-    if (!receipt) {
-      return;
-    }
+  async function prepareLockedReceipt() {
+    if (!receipt?.audit) throw new Error("이 선거는 영수증 암호화를 지원하지 않습니다.");
+    if (!receipt.audit.witness) throw new Error("접수 서명이 아직 준비되지 않아 저장할 수 없습니다.");
+    if (receiptPassword.length < 4) throw new Error("영수증 암호는 4자 이상 입력해 주세요.");
+    if (receiptPassword !== confirmPassword) throw new Error("영수증 암호가 서로 다릅니다.");
+    return protectReceipt(receipt, receiptPassword);
+  }
 
+  async function saveReceipt() {
+    setSaving(true);
     setCopyError("");
     try {
-      await navigator.clipboard.writeText(formatReceiptForCopy(receipt));
+      const locked = await prepareLockedReceipt();
+      downloadReceipt(locked);
+      setReceiptPassword("");
+      setConfirmPassword("");
+    } catch (error) {
+      setCopyError(error instanceof Error ? error.message : "영수증 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function copyReceipt() {
+    setSaving(true);
+    setCopyError("");
+    try {
+      const locked = await prepareLockedReceipt();
+      await navigator.clipboard.writeText(JSON.stringify(locked));
       setCopied(true);
+      setReceiptPassword("");
+      setConfirmPassword("");
       window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setCopyError("안전한 확인증을 복사하지 못했습니다. 접수 서명이 준비됐는지 확인해주세요.");
+    } catch (error) {
+      setCopyError(error instanceof Error ? error.message : "암호화 영수증 복사에 실패했습니다.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -80,27 +110,30 @@ export function VoteCompleteScreen({ preview = false, simulatedReceipt, onSimula
             <div className="border-t border-slate-200 px-4 pb-5 pt-4">
               <div role="note" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
                 <AlertTriangle size={19} className="mt-0.5 shrink-0" aria-hidden="true" />
-                <span><strong>주의: 확인증은 다른 사람에게 보내지 마세요.</strong> 새 확인증에는 선택 결과를 알아낼 수 있는 값이 포함되지 않지만, 개인 접수 증빙은 본인만 보관하는 것이 안전합니다. 과거 방식의 영수증은 선택을 추적할 수 있습니다.</span>
+                <span><strong>영수증과 암호는 다른 사람에게 알려주지 마세요.</strong></span>
               </div>
               <p className="mt-4 text-sm leading-6 text-slate-700">
-                검증용 영수증은 선택 사항입니다. 나중에 서명된 접수 기록이 공개 원장에 포함되었는지 확인하려는 경우에만 저장하세요.
+                투표 당시의 확인값을 암호로 저장합니다. 선거가 끝나면 공개된 기록과 비교해 <strong>내 표가 제대로 반영되었는지</strong> 확인할 수 있습니다.
               </p>
               {receipt.audit ? (
-                <Button variant="secondary" className="mt-4 w-full" disabled={preview} onClick={() => {
-                  try { downloadReceipt(receipt); setCopyError(""); }
-                  catch { setCopyError("확인증을 안전하게 저장하지 못했습니다."); }
-                }}>
-                  <Download size={17} aria-hidden="true" /> {receipt.audit.witness ? "선택 정보를 제외한 접수 확인증 저장" : "서명 대기 확인증 저장"}
-                </Button>
-              ) : <div className="mt-4"><Alert tone="info">이 투표는 이전 검증 방식입니다. 기존 영수증은 공개 원장에서 선택을 알아낼 수 있어 개인정보 보호를 위해 내려받기를 제한합니다.</Alert></div>}
-              {receipt.audit && !receipt.audit.witness ? <p className="mt-2 text-xs leading-5 text-slate-500">접수 서명은 아직 준비 중입니다. 서명 대기 확인증을 보관한 후 공개 검증에서 이어받을 수 있습니다.</p> : null}
-              {receipt.audit ? <p className="mt-3 text-xs leading-5 text-slate-600">나중에 검증하려면 이 화면을 닫기 전에 확인증을 저장하세요. 재발급은 제공되지 않으며, 저장하지 않아도 투표 접수와 결과에는 영향이 없습니다.</p> : null}
+                <>
+                  <label className="mt-4 block text-sm font-medium text-slate-700">영수증 보호 암호 (4자 이상)
+                    <ReceiptPassphraseInput value={receiptPassword} onChange={setReceiptPassword} placeholder="영수증을 열 때 사용할 암호" />
+                  </label>
+                  <label className="mt-3 block text-sm font-medium text-slate-700">암호 확인
+                    <ReceiptPassphraseInput value={confirmPassword} onChange={setConfirmPassword} placeholder="암호를 다시 입력하세요" />
+                  </label>
+                  <Button variant="secondary" className="mt-4 w-full" disabled={preview || saving || !receipt.audit.witness} onClick={saveReceipt}>
+                    <Download size={17} aria-hidden="true" /> {saving ? "영수증 암호화 중" : "암호화 영수증 저장"}
+                  </Button>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">암호는 서버에 저장되지 않습니다. 잊어버리면 내 표를 검증할 수 없습니다. 4자리 숫자처럼 쉬운 암호보다는 긴 암호를 권장합니다. 저장하지 않아도 투표는 완료됩니다.</p>
+                </>
+              ) : <div className="mt-4"><Alert tone="info">이 선거에서는 개인 영수증 검증을 지원하지 않습니다.</Alert></div>}
+              {receipt.audit && !receipt.audit.witness ? <p className="mt-2 text-xs leading-5 text-slate-500">접수 서명이 아직 준비되지 않았습니다. 개인 투표 링크에서 접수 확인증 이어받기를 완료한 뒤 저장해 주세요.</p> : null}
               <details className="mt-4 border-t border-slate-200 pt-4">
                 <summary className="cursor-pointer text-sm font-medium text-blue-700"><Info size={16} className="mr-1 inline" aria-hidden="true" />영수증은 어디에 쓰나요?</summary>
                 <div className="mt-3 space-y-2 text-sm leading-6 text-slate-600">
-                  <p>선거 종료 후 ‘공개 검증’에서 확인증과 공개 기록을 비교하면 서명된 접수 기록이 남아 있는지 확인할 수 있습니다.</p>
-                  <p>선택을 추적할 수 있는 해시·Salt·비밀값은 새 확인증 파일에서 제외합니다. 따라서 파일만 유출되어도 공개 원장에서 어떤 항목을 선택했는지 연결할 수 없도록 했습니다.</p>
-                  <p><strong>검증 범위:</strong> 접수 서명과 포함 여부를 확인하며, 이 파일만으로 내가 선택한 내용이 그대로 집계되었는지까지 증명하지는 못합니다.</p>
+                  <p>지금 영수증을 암호화된 파일로 저장합니다. 선거 종료 후 ‘공개 검증’에서 파일과 암호를 입력하면 내 표가 기록에 있고 선택이 바뀌지 않았는지 확인할 수 있습니다.</p>
                 </div>
               </details>
               <details className="mt-4 border-t border-slate-200 pt-4">
@@ -110,8 +143,8 @@ export function VoteCompleteScreen({ preview = false, simulatedReceipt, onSimula
                   {receipt.audit?.commitment ? <ReceiptRow label="접수 약정" value={receipt.audit.commitment} mono /> : null}
                   {receipt.contextHash ? <ReceiptRow label="투표 항목 기준값" value={receipt.contextHash} mono /> : null}
                 </dl>
-                {receipt.audit?.witness ? <Button className="mt-4 w-full" variant="secondary" disabled={preview} onClick={copyReceipt}>
-                  <Copy size={17} aria-hidden="true" />{copied ? "복사됨" : "접수 확인증 복사"}
+                {receipt.audit?.witness ? <Button className="mt-4 w-full" variant="secondary" disabled={preview || saving || !receipt.audit.witness} onClick={copyReceipt}>
+                  <Copy size={17} aria-hidden="true" />{copied ? "복사됨" : "암호화 영수증 복사"}
                 </Button> : null}
               </details>
               {copyError ? <p role="alert" className="mt-3 text-sm text-red-700">{copyError}</p> : null}
