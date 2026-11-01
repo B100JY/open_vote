@@ -4,6 +4,7 @@
  *
  * Usage: npm run dev:admin-login
  *        npm run dev:admin-login -- --check
+ *        npm run dev:admin-login -- --diagnose
  *        npm run dev:admin-login -- --port 3200
  *
  * Do not deploy or run on shared/CI/production machines.
@@ -18,26 +19,34 @@ function stop(message) {
 function options(args) {
   let port = 3100;
   let dryRun = false;
+  let diagnose = false;
   let email = "";
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--check") dryRun = true;
+    else if (args[i] === "--diagnose") diagnose = true;
     else if (args[i] === "--port" && ["3100", "3200"].includes(args[i + 1])) port = Number(args[++i]);
     else if (args[i] === "--email" && /^[^\s@]+@[^\s@]+$/.test(args[i + 1] ?? "")) email = args[++i].toLowerCase();
     else throw new Error("사용법: npm run dev:admin-login -- [--check] [--port 3100|3200] [--email 관리자메일]");
   }
-  return { port, dryRun, email };
+  if (dryRun && diagnose) throw new Error("--check와 --diagnose는 동시에 사용할 수 없습니다.");
+  return { port, dryRun, diagnose, email };
 }
 
-async function openLocalBrowser(url) {
-  if (process.platform !== "win32") throw new Error("이 명령은 Windows 로컬 PC에서만 사용할 수 있습니다.");
-  // Auth token stays inside the browser URL fragment, not HTTP requests or terminal output.
-  // URL is internally generated and contains only the hex magic-link token hash.
+async function copyLoginLinkToClipboard(url) {
+  // GUI browsers (including ChatGPT's in-app browser) do NOT share auth state.
+  // Never force-open the default browser: the user must paste into the SAME browser they are using.
+  // Send the token through stdin, not the command line / process list / terminal history.
   return new Promise((resolve, reject) => {
-    const child = spawn("cmd.exe", ["/d", "/s", "/c", `start "" "${url}"`], {
-      windowsHide: true, stdio: "ignore",
-    });
+    const child = spawn("clip.exe", [], { windowsHide: true, stdio: ["pipe", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", chunk => { stderr += chunk; });
     child.on("error", reject);
-    child.on("close", (code) => code === 0 ? resolve() : reject(new Error("기본 브라우저를 열지 못했습니다.")));
+    child.on("close", code => code === 0 ? resolve() : reject(new Error(
+      stderr ? "Windows 클립보드에 접근할 수 없습니다. 사용자 데스크톱 세션에서 실행해 주세요." : "로그인 주소를 클립보드에 복사하지 못했습니다."
+    )));
+    child.stdin.on("error", reject);
+    child.stdin.end(url);
   });
 }
 
@@ -45,7 +54,7 @@ async function main() {
   if (process.env.CI || process.env.VERCEL || process.env.NODE_ENV === "production") {
     throw new Error("운영·CI 환경에서는 사용할 수 없습니다.");
   }
-  const { port, dryRun, email } = options(process.argv.slice(2));
+  const { port, dryRun, diagnose, email } = options(process.argv.slice(2));
   if (process.platform !== "win32") throw new Error("Windows PC에서만 실행할 수 있습니다.");
   const origin = `http://localhost:${port}`;
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -89,9 +98,35 @@ async function main() {
   if (linkError || !token || !/^[A-Za-z0-9_-]{40,128}$/.test(token)) {
     throw new Error(`일회용 로그인 확인증을 만들지 못했습니다 (서버 오류: ${linkError?.code ?? linkError?.status ?? "없음"}, 응답 형식: ${typeof token}, 길이: ${typeof token === "string" ? token.length : 0}).`);
   }
-  await openLocalBrowser(`${origin}/admin#gauth=${token}`);
-  console.log(`기본 브라우저에서 ${origin}/admin 페이지를 열었습니다. 로그인 상태를 화면에서 확인해주세요.`);
-  console.log("일회용 인증 값은 화면·터미널·파일에 출력하거나 저장하지 않았습니다.");
+  if (diagnose) {
+    // The same one-use exchange that AdminGate performs, without ever printing the token.
+    const anonymous = createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: session, error: verifyError } = await anonymous.auth.verifyOtp({
+      token_hash: token, type: "magiclink",
+    });
+    if (verifyError || !session.session?.access_token) {
+      throw new Error("일회용 코드 확인에 실패했습니다. Supabase 인증 설정을 확인해 주세요.");
+    }
+    const check = await fetch(`${origin}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${session.session.access_token}` },
+      signal: AbortSignal.timeout(7000),
+    });
+    const member = await check.json().catch(() => null);
+    if (!check.ok || member?.member?.role !== "admin") {
+      throw new Error("로그인 코드로 관리자 권한을 확인하지 못했습니다.");
+    }
+    console.log("일회용 코드 발급 → Supabase 세션 생성 → 로컬 관리자 API 검사 성공.");
+    console.log("검사에 사용한 일회용 코드는 소모됐으며 노출하거나 저장하지 않았습니다.");
+    return;
+  }
+
+  await copyLoginLinkToClipboard(`${origin}/admin#gauth=${token}`);
+  console.log("일회용 로컬 관리자 로그인 주소를 Windows 클립보드에 복사했습니다.");
+  console.log(`지금 사용 중인 동일한 브라우저의 주소창에서 Ctrl+V → Enter를 눌러 주세요. (${origin}/admin)`);
+  console.log("※ 다른 브라우저로 열면 로그인 상태가 그 브라우저에만 저장됩니다.");
+  console.log("※ 클립보드의 링크는 일회용 인증 정보입니다. 다른 곳에 붙여넣거나 공유하지 마세요.");
 }
 
 main().catch(error => stop(error instanceof Error ? error.message : "로그인 명령 실행 실패"));
